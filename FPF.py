@@ -140,8 +140,10 @@ class FPF(object):
         dz = np.reshape(y*self.dt, [1,y.shape[0]])
         dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
         self.particles.theta += self.particles.omega*self.dt + self.ito_integral(dI=dI, dh=self.particles.h-self.h_hat)
-        self.particles.update()
         self.h_hat = self.calculate_h_hat()
+        self.particles.amp -= -(y-self.particles.h)*2*self.h(1,self.particles.theta)*self.dt
+        self.h_hat = self.calculate_h_hat()
+        # self.particles.update()
         return
 
 class Signal(object):
@@ -202,11 +204,11 @@ def h(amp, x):
 
 if __name__ == "__main__":
     # N states of frequency inputs
-    freq = [1., 3.]
+    freq = [0.8]
     # M-by-N amplitude matrix
-    amp = [[1,1]]
+    amp = [[10]]
     # N states of state noises
-    sigma_B = [0.1,0.1]
+    sigma_B = [0.1]
     # M states of signal noises
     sigma_W = [0.1]
 
@@ -216,13 +218,15 @@ if __name__ == "__main__":
     h_hat = np.zeros(signal.Y.shape)
     
     N=100
-    feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.6, sigma_W=sigma_W, dt=dt, h=h)
+    feedback_particle_filter = FPF(number_of_particles=N, f_min=0.6, f_max=1., sigma_W=sigma_W, dt=dt, h=h)
     theta = np.zeros([N, signal.Y.shape[1]])
+    amp = np.zeros([N, signal.Y.shape[1]])
 
     for k in range(signal.Y.shape[1]):
         feedback_particle_filter.update(signal.Y[:,k])
         h_hat[:,k] = feedback_particle_filter.h_hat
         theta[:,k] = np.squeeze(feedback_particle_filter.particles.theta)
+        amp[:,k] = np.squeeze(feedback_particle_filter.particles.amp)
     
     import matplotlib
     matplotlib.use("TkAgg")
@@ -242,7 +246,11 @@ if __name__ == "__main__":
     
     fig, ax = plt.subplots(1,1, figsize=(9,7))
     for k in range(N):
-        ax.scatter(signal.t, theta[k,:], s=0.5) 
+        ax.scatter(signal.t, theta[k,:], s=0.5)
     
+    fig, ax = plt.subplots(1,1, figsize=(9,7))
+    for k in range(N):
+        ax.plot(signal.t, amp[k,:]) 
+    # ax.plot(signal.t, (signal.Y[0]-h_hat[0,:])/10+1)
     plt.show()
 
