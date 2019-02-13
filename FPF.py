@@ -46,7 +46,7 @@ class Particles(object):
     
     def update(self, theta_error):
         """mod the angle of each particle with 2pi"""
-        # self.theta = np.mod(self.theta, 2*np.pi)
+        self.theta = np.mod(self.theta, 2*np.pi)
         """update omega"""
         self.theta_error_sum = theta_error*self.dt + 0.9*self.theta_error_sum
         self.omega += self.Kp*theta_error+self.Ki*self.theta_error_sum
@@ -201,6 +201,9 @@ class FPF(object):
         self.particles.h = self.h(self.particles.amp, self.particles.theta)
         h_hat = np.mean(self.particles.h, axis=0)
         return h_hat
+    
+    def get_h_hat(self):
+        return np.squeeze(self.h_hat)
 
     def update(self, y):
         """Update each particle with new observation data y"""
@@ -229,7 +232,7 @@ class FPF(object):
 
         for k in range(y.shape[1]):
             self.update(y[:,k])
-            h_hat[:,k] = self.h_hat
+            h_hat[:,k] = self.get_h_hat()
             theta[:,k] = self.particles.get_theta()
             amp[:,k] = self.particles.get_amp()
             freq_hat[:,k] = self.particles.get_freq()
@@ -386,18 +389,16 @@ if __name__ == "__main__":
     # M states of signal noises
     sigma_W = [0.1]
 
-    T = 2.
+    T = 10.
     dt = 0.001
     signal = Signal(freq=freq, amp=amp, sigma_B=sigma_B, sigma_W=sigma_W, dt=dt, T=T)
-    # h_hat = np.zeros(signal.Y.shape)
     
     N=100
     feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, sigma_W=sigma_W, dt=dt, h=h)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, \
-                            plot_signal=True, plot_theta=True, plot_omega=True, plot_amp=True)
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_theta=True, plot_omega=True, plot_amp=True)
     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
     figure.plot()
 
