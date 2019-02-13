@@ -1,7 +1,7 @@
-# Feedback-Partical-Filter
+# Feedback-Particle-Filter
 
 ## Introduction
-This repository gives a look on Feedback-Partical-Filter.
+This repository gives a look on Feedback-Particle-Filter.
 
 ## Contents
 - [FPF package](https://github.com/hanson-hschang/Feedback-Partical-Filter/blob/master/FPF.py)
