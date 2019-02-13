@@ -62,13 +62,9 @@ if __name__ == "__main__":
         ax.plot(signal.t, freq_hat[k,:]) 
 
     fig, ax = plt.subplots(1,1, figsize=(7,7))
-    ax.pcolor(feedback_particle_filter.particles.get_freq_range(),\
-                feedback_particle_filter.particles.get_freq_range(),\
-                feedback_particle_filter.particles.sync_matrix, cmap='gray')
+    ax.pcolor(range(N), range(N), feedback_particle_filter.particles.update_sync_matrix(), cmap='gray', vmin=0, vmax=1)
     
-    # fig, ax = plt.subplots(1,1, figsize=(9,7))
-    ax.plot(feedback_particle_filter.particles.get_freq_range())
-    feedback_particle_filter.particles.check_sync()
-            # feedback_particle_filter.particles.check_sync())
+    fig, ax = plt.subplots(1,1, figsize=(7,7))
+    ax.plot(feedback_particle_filter.particles.check_sync())
 
     plt.show()

@@ -5,6 +5,7 @@ Created on Wed Jan. 23, 2019
 """
 
 import numpy as np
+from scipy.signal import find_peaks
 
 class Particles(object):
     """
@@ -30,10 +31,11 @@ class Particles(object):
         self.theta = np.reshape(np.linspace(0, 2*np.pi, self.N, endpoint=False), [-1,1])
         self.omega_bar = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.N), [-1,1])
         self.omega = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.N), [-1,1])
+        self.sync_cutoff = np.exp(-((f_max-f_min)/(self.N-1))**2)
         self.amp = np.reshape(np.ones(self.N), [-1,1])
         self.h = np.reshape(np.zeros(self.N), [-1,1])
         self.theta_error_sum = np.reshape(np.zeros(self.N), [-1,1])
-        self.Kp = 0.2
+        self.Kp = 1
         self.Ki = 0.01
         self.sync_matrix = np.zeros([self.N, self.N])
         self.update_sync_matrix()
@@ -49,14 +51,16 @@ class Particles(object):
         
     def update_sync_matrix(self):
         """update sync_matrix"""
+        omega = np.sort(self.omega[:,0])
         for ni in range(self.N):
             for nj in range(ni, self.N):
-                self.sync_matrix[ni,nj] = np.exp(-(self.omega[ni]-self.omega[nj])**2)
+                self.sync_matrix[ni,nj] = np.exp(-(omega[ni]-omega[nj])**2)
                 self.sync_matrix[nj,ni] = self.sync_matrix[ni,nj]
-        return
+        return self.sync_matrix
 
     def check_sync(self):
         """check synchronized frequencies"""
+        self.update_sync_matrix()
         sync_particles = np.zeros(2*self.N-1)
         for i in range(sync_particles.shape[0]):
             if i < self.N:
@@ -64,15 +68,32 @@ class Particles(object):
             else:
                 temp_i = 2*self.N-2-i
                 sync_vector = np.zeros(int(temp_i/2)+1)
-
+            # Calculate sync_vector
             for j in range(sync_vector.shape[0]):
                 sync_vector[j] = self.sync_matrix[int(i/2)+j+np.mod(i,2),int(i/2)-j]    
-            
+            # Find the farest sync_particles
             for j in range(sync_vector.shape[0]):
-                if sync_vector[j] > 0.99:
+                if sync_vector[j] > self.sync_cutoff:
                     sync_particles[i] =  j
+        # Add bound flags at the Head and the Tail
+        sync_particles = np.append(-np.insert(sync_particles,0,1),[-1])
+        # Filter wripples
+        for i in range(sync_particles.shape[0]-2):
+            if sync_particles[i] == sync_particles[i+2]:
+                sync_particles[i+1] = sync_particles[i]
+        
+        ## Find Peaks and Cutoff Frequencies
+        indices, _ = find_peaks(sync_particles)
+        cutoff_sync_freq = np.array([self.omega[int((index+1)/2),0] for index in indices])
+        sync_index = np.zeros([cutoff_sync_freq.shape[0]-1,2])
+        sync_freq = np.zeros([cutoff_sync_freq.shape[0]-1,2])
+        for i in range(sync_freq.shape[0]):
+            sync_index[i,:] = (indices[i:i+2]+1)/2
+            sync_freq[i,:] = cutoff_sync_freq[i:i+2]
 
+        print(sync_freq/(2*np.pi), sync_index)
         return sync_particles
+        # return sync_freq/(2*np.pi), sync_index
 
     def get_theta(self):
         return np.squeeze(self.theta)
@@ -191,7 +212,8 @@ class FPF(object):
         dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
         dtheta = self.particles.omega_bar*self.dt + self.ito_integral(dI=dI, dh=self.particles.h-self.h_hat)
         self.particles.theta += dtheta
-        self.particles.amp -= -(y-self.particles.h)*2*self.h(1,self.particles.theta)*self.dt
+        self.particles.amp -= -1*(y-self.particles.h)*2*self.h(1,self.particles.theta)*self.dt          #update amp indivisually
+        # self.particles.amp -= -1*(y-self.h_hat)*2*np.mean(self.h(1,self.particles.theta))*self.dt       #update amp together
         self.h_hat = self.calculate_h_hat()
         self.particles.update(theta_error=dtheta-self.particles.omega*self.dt)
         return
@@ -242,7 +264,7 @@ class Signal(object):
 
     def h(self, amp, x):
         """observation function maps states(x) to observations(y)"""
-        return np.matmul(amp, np.cos(x))
+        return np.matmul(amp, np.sin(x))
 
 def h(amp, x):
         return amp*np.cos(x)
@@ -274,40 +296,54 @@ if __name__ == "__main__":
         theta[:,k] = feedback_particle_filter.particles.get_theta()
         amp[:,k] = np.squeeze(feedback_particle_filter.particles.amp)
         freq_hat[:,k] = feedback_particle_filter.particles.get_freq()
-    feedback_particle_filter.particles.update_sync_matrix()
 
     import matplotlib
     matplotlib.use("TkAgg")
     import matplotlib.pyplot as plt
-
+    # plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    fontsize = 20
     fig, axes = plt.subplots(signal.Y.shape[0],1, figsize=(9,7))
     try:
         iterator = iter(axes)
     except TypeError:
         ax = axes
-        ax.plot(signal.t, signal.Y[0])
-        ax.plot(signal.t, h_hat[0,:])
+        ax.plot(signal.t, signal.Y[0], label=r'signal')
+        ax.plot(signal.t, h_hat[0,:], label=r'estimation')
     else:
         for i, ax in enumerate(axes):
-            ax.plot(signal.t, signal.Y[i])
-            ax.plot(signal.t, h_hat[i,:])
-    
+            ax.plot(signal.t, signal.Y[i], label=r'signal')
+            ax.plot(signal.t, h_hat[i,:], label=r'estimation')
+    ax.legend(fontsize=fontsize-5)
+    ax.tick_params(labelsize=fontsize)
+    ax.set_xlabel('time', fontsize=fontsize)
+
     fig, ax = plt.subplots(1,1, figsize=(9,7))
     for k in range(N):
         ax.scatter(signal.t, theta[k,:], s=0.5)
+    ax.tick_params(labelsize=fontsize)
+    ax.set_xlabel('time', fontsize=fontsize)
+    ax.set_ylabel(r'$\theta$ [rad]', fontsize=fontsize)
+    ax.set_title('Particles', fontsize=fontsize+2)
     
     fig, ax = plt.subplots(1,1, figsize=(9,7))
     for k in range(N):
         ax.plot(signal.t, amp[k,:]) 
+    ax.tick_params(labelsize=fontsize)
+    ax.set_xlabel('time', fontsize=fontsize)
+    ax.set_ylabel('$A$', fontsize=fontsize)
+    ax.set_title('Amplitude of Particles', fontsize=fontsize+2)
         
     fig, ax = plt.subplots(1,1, figsize=(9,7))
     for k in range(N):
         ax.plot(signal.t, freq_hat[k,:]) 
+    ax.tick_params(labelsize=fontsize)
+    ax.set_xlabel('time', fontsize=fontsize)
+    ax.set_ylabel('$\omega$ [Hz]', fontsize=fontsize)
+    ax.set_title('Frequency of Particles', fontsize=fontsize+2)
     
     fig, ax = plt.subplots(1,1, figsize=(7,7))
-    ax.pcolor(feedback_particle_filter.particles.get_freq_range(),\
-                feedback_particle_filter.particles.get_freq_range(),\
-                feedback_particle_filter.particles.sync_matrix, cmap='gray')
+    ax.pcolor(range(N), range(N), feedback_particle_filter.particles.update_sync_matrix(), cmap='gray', vmin=0, vmax=1)
  
     fig, ax = plt.subplots(1,1, figsize=(7,7))
     ax.plot(feedback_particle_filter.particles.check_sync())
