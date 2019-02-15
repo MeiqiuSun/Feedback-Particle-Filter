@@ -4,111 +4,13 @@ Created on Wed Jan. 23, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
-import numpy as np
-from scipy.signal import find_peaks
+from Signal import Signal
+from Tool import Particles, Struct
 
+import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
-
-class Particles(object):
-    """
-    Particles: particles has a scalar state which denotes phase in [0 2pi] cycle.
-        Initialize = Particles(number_of_particles, f_min, f_max)
-            number_of_particles: integer, number of particles
-            f_min: float, minimum frequency in Hz
-            f_max: float, maximum frequency in Hz
-        Members =
-            N: integer, number of particles
-            theta: numpy array with the shape of (N,1), the angle (rad) for N particles
-            omega: numpy array with the shape of (N,1), the inherited frequency (rad/s) for N particles
-            amp: numpy array with the shape of (N,1), the amplitude for N particles
-            h: numpy array with the shape of (N,1), the esitmated observation for N particles
-        Methods =
-            update(): mod the angle of each particle with 2pi
-        
-    """
-    def __init__(self, number_of_particles, f_min, f_max, dt):
-        """Initialize Particles"""
-        self.dt = dt
-        self.N = int(number_of_particles)
-        self.theta = np.reshape(np.linspace(0, 2*np.pi, self.N, endpoint=False), [-1,1])
-        self.omega_bar = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.N), [-1,1])
-        self.omega = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.N), [-1,1])
-        self.sync_cutoff = np.exp(-((f_max-f_min)/(self.N-1))**2)
-        self.amp = np.reshape(np.ones(self.N), [-1,1])
-        self.h = np.reshape(np.zeros(self.N), [-1,1])
-        self.theta_error_sum = np.reshape(np.zeros(self.N), [-1,1])
-        self.Kp = 1
-        self.Ki = 0.01
-        self.sync_matrix = np.zeros([self.N, self.N])
-        self.update_sync_matrix()
-    
-    def update(self, theta_error):
-        """mod the angle of each particle with 2pi"""
-        self.theta = np.mod(self.theta, 2*np.pi)
-        """update omega"""
-        self.theta_error_sum = theta_error*self.dt + 0.9*self.theta_error_sum
-        self.omega += self.Kp*theta_error+self.Ki*self.theta_error_sum
-        return
-        
-    def update_sync_matrix(self):
-        """update sync_matrix"""
-        omega = np.sort(self.omega[:,0])
-        for ni in range(self.N):
-            for nj in range(ni, self.N):
-                self.sync_matrix[ni,nj] = np.exp(-(omega[ni]-omega[nj])**2)
-                self.sync_matrix[nj,ni] = self.sync_matrix[ni,nj]
-        return self.sync_matrix
-
-    def check_sync(self):
-        """check synchronized frequencies"""
-        self.update_sync_matrix()
-        sync_particles = np.zeros(2*self.N-1)
-        for i in range(sync_particles.shape[0]):
-            if i < self.N:
-                sync_vector = np.zeros(int(i/2)+1)
-            else:
-                temp_i = 2*self.N-2-i
-                sync_vector = np.zeros(int(temp_i/2)+1)
-            # Calculate sync_vector
-            for j in range(sync_vector.shape[0]):
-                sync_vector[j] = self.sync_matrix[int(i/2)+j+np.mod(i,2),int(i/2)-j]    
-            # Find the farest sync_particles
-            for j in range(sync_vector.shape[0]):
-                if sync_vector[j] > self.sync_cutoff:
-                    sync_particles[i] =  j
-        # Add bound flags at the Head and the Tail
-        sync_particles = np.append(-np.insert(sync_particles,0,1),[-1])
-        # Filter wripples
-        for i in range(sync_particles.shape[0]-2):
-            if sync_particles[i] == sync_particles[i+2]:
-                sync_particles[i+1] = sync_particles[i]
-        
-        ## Find Peaks and Cutoff Frequencies
-        indices, _ = find_peaks(sync_particles)
-        cutoff_sync_freq = np.array([self.omega[int((index+1)/2),0] for index in indices])
-        sync_index = np.zeros([cutoff_sync_freq.shape[0]-1,2])
-        sync_freq = np.zeros([cutoff_sync_freq.shape[0]-1,2])
-        for i in range(sync_freq.shape[0]):
-            sync_index[i,:] = (indices[i:i+2]+1)/2
-            sync_freq[i,:] = cutoff_sync_freq[i:i+2]
-
-        print(sync_freq/(2*np.pi), sync_index)
-        return sync_particles
-        # return sync_freq/(2*np.pi), sync_index
-
-    def get_theta(self):
-        return np.squeeze(self.theta)
-
-    def get_amp(self):
-        return np.squeeze(self.amp)
-    
-    def get_freq(self):
-        return np.squeeze(self.omega/(2*np.pi))
-
-    def get_freq_range(self):
-        return np.squeeze(self.omega_bar/(2*np.pi))
 
 class FPF(object):
     """
@@ -237,59 +139,6 @@ class FPF(object):
             amp[:,k] = self.particles.get_amp()
             freq_hat[:,k] = self.particles.get_freq()
         return Struct(h_hat=h_hat, theta=theta, amp=amp, freq_hat=freq_hat)
-
-class Signal(object):
-    """
-    Signal:
-        Notation Notes:
-            N: number of states(X)
-            M: number of observations(Y)
-        Initialize = Signal(freq, amp, sigma_B, sigma_W, dt, T)
-            freq: 1D list with length N, list of freqencies in Hz
-            amp: 2D list with shape of M-by-N, amplitude parameters for h function in Y=h(X)
-            sigma_B: 1D list with legnth N, standard deviation of noise of states(X)
-            sigma_W: 1D list with legnth M, standard deviation of noise of observations(Y)
-            dt: float, size of time step in sec
-            T: float or int, end time in sec
-        Members =
-            omega: numpy array with shape of (N,), list of freqencies in rad/s
-            amp: numpy array with the shape of (M,N), amplitude parameters for h function in Y=h(X)
-            sigma_B: numpy array with the shape of (N,1), standard deviation of noise of states(X)
-            sigma_W: numpy array with the shape of (M,1), standard deviation of noise of observations(Y)
-            dt: float, size of time step in sec
-            T: float, end time in sec, which is also an integer mutiple of dt
-            t: numpy array with the shape of (T/dt+1,), i.e. 0, dt, 2dt, ... , T-dt, T
-            X: numpy array with the shape of (N,T/dt+1), states in time series
-            dX: numpy array with the shape of (N,T/dt+1), states increment in time series
-            Y: numpy array with the shape of (M,T/dt+1), observations in time series
-        Methods =
-            h(amp, x): observation function maps states(X) to observations(Y)
-    """
-    def __init__(self, freq, amp, sigma_B, sigma_W, dt, T):
-        """Initialize"""
-        self.omega = 2*np.pi*(np.array(freq))
-        self.amp = np.array(amp)
-        self.sigma_B = np.reshape(np.array(sigma_B), [self.amp.shape[1],-1])
-        self.sigma_W = np.reshape(np.array(sigma_W), [self.amp.shape[0],-1])
-        self.dt = dt
-        self.T = self.dt*int(T/self.dt)
-        self.t = np.arange(0,self.T+self.dt,self.dt)
-        self.X = np.zeros([self.sigma_B.shape[0], self.t.shape[0]])
-        self.dX = np.zeros(self.X.shape)
-        for n in range(self.X.shape[0]):
-            """dX = omega*dt + sigma_B*dB"""
-            self.dX[n,:] = self.omega[n]*self.dt + self.sigma_B[n]*self.dt*np.random.normal(0,1,self.t.shape[0])
-            self.X[n,:] = np.cumsum(self.dX[n,:])
-        self.Y = self.h(self.amp, self.X) + self.sigma_W*np.random.normal(0,1,[self.sigma_W.shape[0],self.t.shape[0]])
-
-    def h(self, amp, x):
-        """observation function maps states(x) to observations(y)"""
-        return np.matmul(amp, np.sin(x))
-
-class Struct(dict):
-    def __init__(self, **kwds):
-        dict.__init__(self, kwds)
-        self.__dict__.update(kwds)
 
 class Figure(object):
     def __init__(self, fig_property, signal, filtered_signal):

@@ -1,11 +1,15 @@
 """
-Created on Thu Feb. 13, 2019
+Created on Wed Feb. 13, 2019
 
 @author: Heng-Sheng (Hanson) Chang
 """
 
+
+from FPF import FPF, h
+from Signal import Signal
+from Tool import Struct
+
 import numpy as np
-from FPF import FPF, Signal, Struct, h
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt

@@ -4,8 +4,11 @@ Created on Thu Jan. 31, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
+from FPF import FPF, Figure, h
+from Signal import Signal
+from Tool import Struct
+
 import numpy as np
-from FPF import FPF, Signal, Struct, Figure, h
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
