@@ -24,12 +24,14 @@ class FPF(object):
             sigma_W: 1D list of float with legnth M, standard deviations of noise of observations(y)
             dt: float, size of time step in sec
             h: function, estimated observation dynamics
+            indep_amp_update: bool, if update amplitude independently 
         Members = 
             particles: Particles
             sigma_W: numpy array with the shape of (M,1), standard deviation of noise of observations(y)
             dt: float, size of time step in sec
             h: function, estimated observation dynamics
             h_hat: numpy array with the shape of (M,), filtered observations
+            indep_amp_update: bool, if update amplitude independently 
         Methods =
             correction(dI, dh): Correct the theta prediction with new observations(y)
             calculate_h_hat(): Calculate h for each particle and h_hat by averaging h from all particles
@@ -37,12 +39,13 @@ class FPF(object):
             run(y): Run FPF with time series observations(y)
     """
 
-    def __init__(self, number_of_particles, f_min, f_max, sigma_W, dt, h):
+    def __init__(self, number_of_particles, f_min, f_max, sigma_W, dt, h, indep_amp_update=False):
         self.particles = Particles(number_of_particles=number_of_particles, f_min=f_min, f_max=f_max, dt=dt) 
         self.sigma_W = np.reshape(np.array(sigma_W), [len(sigma_W),-1])
         self.dt = dt
         self.h = h
         self.h_hat = np.zeros(len(sigma_W))
+        self.indep_amp_update = indep_amp_update
     
     def correction(self, dI, dh):
         """Correct the theta prediction with new observations(y):
@@ -108,8 +111,12 @@ class FPF(object):
         dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
         dtheta = self.particles.omega_bar*self.dt + self.correction(dI=dI, dh=self.particles.h-self.h_hat)
         self.particles.theta += dtheta
-        self.particles.amp -= -1*(y-self.particles.h)*2*self.h(1,self.particles.theta)*self.dt          #update amp indivisually
-        # self.particles.amp -= -1*(y-self.h_hat)*2*np.mean(self.h(1,self.particles.theta))*self.dt       #update amp together
+        if self.indep_amp_update:
+            #update amplitude indivisually
+            self.particles.amp -= -1*(y-self.particles.h)*2*self.h(1,self.particles.theta)*self.dt          
+        else:
+            #update amplitude together
+            self.particles.amp -= -1*(y-self.h_hat)*2*np.mean(self.h(1,self.particles.theta))*self.dt       
         self.h_hat = self.calculate_h_hat()
         self.particles.update(theta_error=dtheta-self.particles.omega*self.dt)
         return
