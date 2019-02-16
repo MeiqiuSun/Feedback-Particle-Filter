@@ -21,12 +21,12 @@ class Particles(object):
         Members =
             N: integer, number of particles
             theta: numpy array with the shape of (N,1), the angle (rad) for N particles
-            omega: numpy array with the shape of (N,1), the inherited frequency (rad/s) for N particles
+            omega_bar: numpy array with the shape of (N,1), the inherited frequency (rad/s) for N particles
+            omega: numpy array with the shape of (N,1), the updated frequency (rad/s) for N particles
             amp: numpy array with the shape of (N,1), the amplitude for N particles
             h: numpy array with the shape of (N,1), the esitmated observation for N particles
         Methods =
             update(): mod the angle of each particle with 2pi
-        
     """
     def __init__(self, number_of_particles, f_min, f_max, dt):
         """Initialize Particles"""
@@ -100,12 +100,12 @@ class Particles(object):
 
     def get_theta(self):
         return np.squeeze(self.theta)
-
-    def get_amp(self):
-        return np.squeeze(self.amp)
     
     def get_freq(self):
         return np.squeeze(self.omega/(2*np.pi))
+
+    def get_amp(self):
+        return np.squeeze(self.amp)
 
     def get_freq_range(self):
         return np.squeeze(self.omega_bar/(2*np.pi))
@@ -114,3 +114,10 @@ class Struct(dict):
     def __init__(self, **kwds):
         dict.__init__(self, kwds)
         self.__dict__.update(kwds)
+
+def isiterable(object):
+    try:
+        it = iter(object)
+    except TypeError: 
+        return False
+    return True

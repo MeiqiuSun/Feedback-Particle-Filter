@@ -4,7 +4,6 @@ Created on Wed Feb. 13, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
-
 from FPF import FPF, h
 from Signal import Signal
 from Tool import Struct
@@ -15,6 +14,29 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 class CFPF(object):
+    """FPF: Coupled Feedback Partilce Filter
+        Notation Note:
+            N: number of channels
+            M: number of observations(y)
+        Initialize = FPF(number_of_particles, f_min, f_max, sigma_W, dt, h)
+            number_of_particles: integer, number of particles
+            f_min: float, minimum frequency in Hz
+            f_max: float, maximum frequency in Hz
+            sigma_W: 1D list with legnth M, standard deviation of noise of observations(y)
+            dt: float, size of time step in sec
+            h: function, estimated observation dynamics
+        Members = 
+            particles: Particles
+            sigma_W: numpy array with the shape of (M,1), standard deviation of noise of observations(y)
+            dt: float, size of time step in sec
+            h: function, estimated observation dynamics
+            h_hat: float, filtered observation
+        Methods =
+            ito_integral(dI, dh): Calculate the ito integral
+            calculate_h_hat(): Calculate h for each particle and the average of h (h_hat)
+            update(y): Update each particle with new observation data y
+    """
+
     def __init__(self, number_of_channels, number_of_particles, f_min, f_max, sigma_W, dt, h):
         self.fpf = []
         self.N = number_of_channels
@@ -53,7 +75,7 @@ class CFPF(object):
             self.update(y[:,k])
             h_hat[:,k] = self.h_hat
             for n in range(self.N):
-                h_hat_n[n][:,k] = self.fpf[n].get_h_hat()
+                h_hat_n[n][:,k] = self.fpf[n].h_hat
                 theta[n][:,k] = self.fpf[n].particles.get_theta()
                 amp[n][:,k] = self.fpf[n].particles.get_amp()
                 freq_hat[n][:,k] = self.fpf[n].particles.get_freq()

@@ -32,7 +32,7 @@ if __name__ == "__main__":
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_theta=True, plot_omega=True, plot_amp=True)
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_theta=True, plot_freq=True, plot_amp=True)
     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
     figure.plot()
     
