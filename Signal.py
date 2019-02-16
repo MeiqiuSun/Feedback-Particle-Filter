@@ -36,7 +36,7 @@ class Signal(object):
         Methods =
             h(amp, x): observation function maps states(X) to observations(Y)
     """
-    
+
     def __init__(self, freq, amp, sigma_B, sigma_W, dt, T):
         self.omega = 2*np.pi*(np.array(freq))
         self.amp = np.array(amp)
@@ -56,3 +56,26 @@ class Signal(object):
     def h(self, amp, x):
         """observation function maps states(x) to observations(y)"""
         return np.matmul(amp, np.sin(x))
+
+if __name__ == "__main__":
+    # N states of frequency inputs
+    freq = [1.]
+    # M-by-N amplitude matrix
+    amp = [[10]]
+    # N states of state noises
+    sigma_B = [0.1]
+    # M states of signal noises
+    sigma_W = [0.1]
+
+    T = 10.
+    dt = 0.001
+    signal = Signal(freq=freq, amp=amp, sigma_B=sigma_B, sigma_W=sigma_W, dt=dt, T=T)
+
+    fontsize = 20
+    fig, ax = plt.subplots(1, 1, figsize=(9,7))
+    for i in range(signal.Y.shape[0]):
+        ax.plot(signal.t, signal.Y[i], label='$Y_{}$'.format(i+1))
+    plt.legend(fontsize=fontsize-5)
+    plt.tick_params(labelsize=fontsize)
+    plt.xlabel('time [s]', fontsize=fontsize)
+    plt.show()
