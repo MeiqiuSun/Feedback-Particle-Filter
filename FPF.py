@@ -15,13 +15,13 @@ import matplotlib.pyplot as plt
 class FPF(object):
     """FPF: Feedback Partilce Filter
         Notation Note:
-            N: number of particles
+            Np: number of particles
             M: number of observations(y)
         Initialize = FPF(number_of_particles, f_min, f_max, sigma_W, dt, h)
             number_of_particles: integer, number of particles
             f_min: float, minimum frequency in Hz
             f_max: float, maximum frequency in Hz
-            sigma_W: 1D list with legnth M, standard deviation of noise of observations(y)
+            sigma_W: 1D list of float with legnth M, standard deviations of noise of observations(y)
             dt: float, size of time step in sec
             h: function, estimated observation dynamics
         Members = 
@@ -34,7 +34,7 @@ class FPF(object):
             correction(dI, dh): Correct the theta prediction with new observations(y)
             calculate_h_hat(): Calculate h for each particle and h_hat by averaging h from all particles
             update(y): Update each particle with new observations(y)
-            run(y): Run FPF with a list of a time series observations(y)
+            run(y): Run FPF with time series observations(y)
     """
 
     def __init__(self, number_of_particles, f_min, f_max, sigma_W, dt, h):
@@ -42,7 +42,7 @@ class FPF(object):
         self.sigma_W = np.reshape(np.array(sigma_W), [len(sigma_W),-1])
         self.dt = dt
         self.h = h
-        self.h_hat = self.calculate_h_hat()
+        self.h_hat = np.zeros(len(sigma_W))
     
     def correction(self, dI, dh):
         """Correct the theta prediction with new observations(y):
@@ -115,7 +115,7 @@ class FPF(object):
         return
 
     def run(self, y):
-        """Run FPF with a list of a time series observations(y):
+        """Run FPF with time series observations(y):
             Arguments = 
                 y: numpy array with the shape of (M,T/dt+1), observations in time series
             Variables = 
@@ -127,9 +127,9 @@ class FPF(object):
                 filtered_signal: Struct(h_hat, theta, freq, amp), filtered observations with information of particles
         """
         h_hat = np.zeros(y.shape)
-        theta = np.zeros([self.particles.N, y.shape[1]])
-        freq = np.zeros([self.particles.N, y.shape[1]])
-        amp = np.zeros([self.particles.N, y.shape[1]])
+        theta = np.zeros([self.particles.Np, y.shape[1]])
+        freq = np.zeros([self.particles.Np, y.shape[1]])
+        amp = np.zeros([self.particles.Np, y.shape[1]])
 
         for k in range(y.shape[1]):
             self.update(y[:,k])

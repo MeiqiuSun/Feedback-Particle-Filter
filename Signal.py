@@ -36,8 +36,8 @@ class Signal(object):
         Methods =
             h(amp, x): observation function maps states(X) to observations(Y)
     """
+    
     def __init__(self, freq, amp, sigma_B, sigma_W, dt, T):
-        """Initialize"""
         self.omega = 2*np.pi*(np.array(freq))
         self.amp = np.array(amp)
         self.sigma_B = np.reshape(np.array(sigma_B), [self.amp.shape[1],-1])

@@ -12,64 +12,75 @@ import matplotlib.pyplot as plt
 
 
 class Particles(object):
-    """
-    Particles: particles has a scalar state which denotes phase in [0 2pi] cycle.
+    """Particles: particles has a scalar state which denotes phase in [0 2pi] cycle.
         Initialize = Particles(number_of_particles, f_min, f_max)
             number_of_particles: integer, number of particles
             f_min: float, minimum frequency in Hz
             f_max: float, maximum frequency in Hz
         Members =
-            N: integer, number of particles
-            theta: numpy array with the shape of (N,1), the angle (rad) for N particles
-            omega_bar: numpy array with the shape of (N,1), the inherited frequency (rad/s) for N particles
-            omega: numpy array with the shape of (N,1), the updated frequency (rad/s) for N particles
-            amp: numpy array with the shape of (N,1), the amplitude for N particles
-            h: numpy array with the shape of (N,1), the esitmated observation for N particles
+            Np: integer, number of particles
+            theta: numpy array with the shape of (Np,1), the angle (rad) for Np particles
+            omega_bar: numpy array with the shape of (Np,1), the inherited frequency (rad/s) for Np particles
+            omega: numpy array with the shape of (Np,1), the updated frequency (rad/s) for Np particles
+            sync_cutoff: float, e^(-(initial frequency difference)^2)
+            amp: numpy array with the shape of (Np,1), the amplitude for Np particles
+            h: numpy array with the shape of (Np,1), the esitmated observation for Np particles
+            theta_error_sum: numpy array with the shape of (Np,1), the integral of theta error (rad) for Np particles
+            Kp: float, P Gain for omega state observer
+            Ki: float, I Gain for omega state observer
+            sync_matrix: numpy array with the shape of (Np,Np), synchronized matrix
         Methods =
-            update(): mod the angle of each particle with 2pi
+            update(): mod the angle of each particle with 2pi and update omega with PI controller
+            update_sync_matrix(): update synchronized matrix
+            check_sync(): check synchronized frequencies
+            get_theta(): return a numpy array with the shape of (Np,) of angle (rad) for Np particles
+            get_freq(): return a numpy array with the shape of (Np,) of frequency (Hz) for Np particles
+            get_amp: return a numpy array with the shape of (Np,) of amplitude for Np particles
+            get_freq_range(): return a numpy array with the shape of (Np,) of frequency range (Hz) for Np particles
     """
+
     def __init__(self, number_of_particles, f_min, f_max, dt):
         """Initialize Particles"""
         self.dt = dt
-        self.N = int(number_of_particles)
-        self.theta = np.reshape(np.linspace(0, 2*np.pi, self.N, endpoint=False), [-1,1])
-        self.omega_bar = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.N), [-1,1])
-        self.omega = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.N), [-1,1])
-        self.sync_cutoff = np.exp(-((f_max-f_min)/(self.N-1))**2)
-        self.amp = np.reshape(np.ones(self.N), [-1,1])
-        self.h = np.reshape(np.zeros(self.N), [-1,1])
-        self.theta_error_sum = np.reshape(np.zeros(self.N), [-1,1])
+        self.Np = int(number_of_particles)
+        self.theta = np.reshape(np.linspace(0, 2*np.pi, self.Np, endpoint=False), [-1,1])
+        self.omega_bar = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.Np), [-1,1])
+        self.omega = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.Np), [-1,1])
+        self.sync_cutoff = np.exp(-(2*np.pi*(f_max-f_min)/(self.Np-1))**2)
+        self.amp = np.reshape(np.ones(self.Np), [-1,1])
+        self.h = np.reshape(np.zeros(self.Np), [-1,1])
+        self.theta_error_sum = np.reshape(np.zeros(self.Np), [-1,1])
         self.Kp = 1
         self.Ki = 0.01
-        self.sync_matrix = np.zeros([self.N, self.N])
+        self.sync_matrix = np.zeros([self.Np, self.Np])
         self.update_sync_matrix()
     
     def update(self, theta_error):
         """mod the angle of each particle with 2pi"""
         self.theta = np.mod(self.theta, 2*np.pi)
-        """update omega"""
+        """update omega with PI controller"""
         self.theta_error_sum = theta_error*self.dt + 0.9*self.theta_error_sum
-        self.omega += self.Kp*theta_error+self.Ki*self.theta_error_sum
+        self.omega += self.Kp*theta_error + self.Ki*self.theta_error_sum
         return
         
     def update_sync_matrix(self):
-        """update sync_matrix"""
+        """update synchronized matrix"""
         omega = np.sort(self.omega[:,0])
-        for ni in range(self.N):
-            for nj in range(ni, self.N):
-                self.sync_matrix[ni,nj] = np.exp(-(omega[ni]-omega[nj])**2)
-                self.sync_matrix[nj,ni] = self.sync_matrix[ni,nj]
+        for i in range(self.Np):
+            for j in range(i, self.Np):
+                self.sync_matrix[i,j] = np.exp(-(omega[i]-omega[j])**2)
+                self.sync_matrix[j,i] = self.sync_matrix[i,j]
         return self.sync_matrix
 
     def check_sync(self):
         """check synchronized frequencies"""
         self.update_sync_matrix()
-        sync_particles = np.zeros(2*self.N-1)
+        sync_particles = np.zeros(2*self.Np-1)
         for i in range(sync_particles.shape[0]):
-            if i < self.N:
+            if i < self.Np:
                 sync_vector = np.zeros(int(i/2)+1)
             else:
-                temp_i = 2*self.N-2-i
+                temp_i = 2*self.Np-2-i
                 sync_vector = np.zeros(int(temp_i/2)+1)
             # Calculate sync_vector
             for j in range(sync_vector.shape[0]):
@@ -111,11 +122,13 @@ class Particles(object):
         return np.squeeze(self.omega_bar/(2*np.pi))
 
 class Struct(dict):
+    """create a struct"""
     def __init__(self, **kwds):
         dict.__init__(self, kwds)
         self.__dict__.update(kwds)
 
 def isiterable(object):
+    """check if object is iterable"""
     try:
         it = iter(object)
     except TypeError: 
