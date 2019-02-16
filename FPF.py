@@ -35,16 +35,22 @@ class FPF(object):
         Methods =
             correction(dI, dh): Correct the theta prediction with new observations(y)
             calculate_h_hat(): Calculate h for each particle and h_hat by averaging h from all particles
+            calculate_omega(): Calculate average omega from all particles
+            calculate_amp(): Calculate average amplitude form all particles
+            get_freq(): return average frequency (Hz) 
+            get_amp(): return average amplitude 
             update(y): Update each particle with new observations(y)
             run(y): Run FPF with time series observations(y)
     """
 
-    def __init__(self, number_of_particles, f_min, f_max, sigma_W, dt, h, indep_amp_update=False):
+    def __init__(self, number_of_particles, f_min, f_max, sigma_W, dt, h, indep_amp_update=True):
         self.particles = Particles(number_of_particles=number_of_particles, f_min=f_min, f_max=f_max, dt=dt) 
         self.sigma_W = np.reshape(np.array(sigma_W), [len(sigma_W),-1])
         self.dt = dt
         self.h = h
         self.h_hat = np.zeros(len(sigma_W))
+        self.omega = 2*np.pi*(np.array(f_min)+np.array(f_max))/2
+        self.amp = 1
         self.indep_amp_update = indep_amp_update
     
     def correction(self, dI, dh):
@@ -98,6 +104,20 @@ class FPF(object):
         self.particles.h = self.h(self.particles.amp, self.particles.theta)
         h_hat = np.mean(self.particles.h, axis=0)
         return h_hat
+    
+    def calculate_omega(self):
+        """Calculate average omega from all particles"""
+        return np.mean(self.particles.omega, axis=0)
+    
+    def calculate_amp(self):
+        """Calculate average amplitude form all particles"""
+        return np.mean(self.particles.amp, axis=0)
+
+    def get_freq(self):
+        return np.squeeze(self.omega/(2*np.pi))
+
+    def get_amp(self):
+        return np.squeeze(self.amp)
 
     def update(self, y):
         """Update each particle with new observations(y):
@@ -118,6 +138,8 @@ class FPF(object):
             #update amplitude together
             self.particles.amp -= -1*(y-self.h_hat)*2*np.mean(self.h(1,self.particles.theta))*self.dt       
         self.h_hat = self.calculate_h_hat()
+        self.omega = self.calculate_omega()
+        self.amp = self.calculate_amp()
         self.particles.update(theta_error=dtheta-self.particles.omega*self.dt)
         return
 
@@ -137,14 +159,19 @@ class FPF(object):
         theta = np.zeros([self.particles.Np, y.shape[1]])
         freq = np.zeros([self.particles.Np, y.shape[1]])
         amp = np.zeros([self.particles.Np, y.shape[1]])
+        freq_mean = np.zeros([1, y.shape[1]])
+        amp_mean = np.zeros([1, y.shape[1]])
 
         for k in range(y.shape[1]):
             self.update(y[:,k])
             h_hat[:,k] = self.h_hat
             theta[:,k] = self.particles.get_theta()
             freq[:,k] = self.particles.get_freq()
+            freq_mean[0,k] = self.get_freq()
             amp[:,k] = self.particles.get_amp()
-        return Struct(h_hat=h_hat, theta=theta, freq=freq, amp=amp)
+            amp_mean[0,k] = self.get_amp()
+
+        return Struct(h_hat=h_hat, theta=theta, freq=freq, amp=amp, freq_mean=freq_mean, amp_mean=amp_mean)
 
 class Figure(object):
     """Figure: Figures for Feedback Partilce Filter
@@ -160,8 +187,8 @@ class Figure(object):
             plot(): plot figures
             plot_signal(axes): plot a figure with observations and filtered observations together, each of axes represents a time series of observation
             plot_theta(ax): plot theta for each particles
-            plot_freq(ax): plot frequency for each particles
-            plot_amp(ax): plot amplitude for each particles
+            plot_freq(ax): plot frequency for each particles and the average frequency
+            plot_amp(ax): plot amplitude for each particles and the average amplitude
             plot_sync_matrix(ax, sync_matrix): plot synchronized matrix
             plot_sync_particles(ax, sync_particles): plot synchronized particles
     """
@@ -222,7 +249,9 @@ class Figure(object):
     
     def plot_freq(self, ax):
         for k in range(self.filtered_signal.freq.shape[0]):
-            ax.plot(self.signal.t, self.filtered_signal.freq[k,:]) 
+            ax.plot(self.signal.t, self.filtered_signal.freq[k,:])
+        ax.plot(self.signal.t, self.filtered_signal.freq_mean[0,:], linewidth=2, label='$f_m$')
+        ax.legend(fontsize=self.fig_property.fontsize-5)
         ax.tick_params(labelsize=self.fig_property.fontsize)
         ax.set_xlabel('time [s]', fontsize=self.fig_property.fontsize)
         ax.set_ylabel('$f$ [Hz]', fontsize=self.fig_property.fontsize)
@@ -233,6 +262,8 @@ class Figure(object):
     def plot_amp(self, ax):
         for k in range(self.filtered_signal.amp.shape[0]):
             ax.plot(self.signal.t, self.filtered_signal.amp[k,:]) 
+        ax.plot(self.signal.t, self.filtered_signal.amp_mean[0,:], linewidth=2, label='$A_m$')
+        ax.legend(fontsize=self.fig_property.fontsize-5)
         ax.tick_params(labelsize=self.fig_property.fontsize)
         ax.set_xlabel('time [s]', fontsize=self.fig_property.fontsize)
         ax.set_ylabel('$A$', fontsize=self.fig_property.fontsize)
