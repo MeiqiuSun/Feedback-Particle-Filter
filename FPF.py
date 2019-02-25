@@ -284,20 +284,21 @@ def h(amp, x):
 
 if __name__ == "__main__":
     # N states of frequency inputs
-    freq = [1.]
+    freq = [340]
     # M-by-N amplitude matrix
-    amp = [[10]]
+    amp = [[1]]
     # N states of state noises
-    sigma_B = [0.1]
+    sigma_B = [0.0001]
     # M states of signal noises
-    sigma_W = [0.1]
+    sigma_W = [0.0001]
 
-    T = 10.
-    dt = 0.001
+    T = 0.01
+    sampling_rate = 16000 # Hz
+    dt = 1./sampling_rate
     signal = Signal(freq=freq, amp=amp, sigma_B=sigma_B, sigma_W=sigma_W, dt=dt, T=T)
     
     N=100
-    feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, sigma_W=sigma_W, dt=dt, h=h)
+    feedback_particle_filter = FPF(number_of_particles=N, f_min=280, f_max=400, sigma_W=sigma_W, dt=dt, h=h)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20

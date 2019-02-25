@@ -50,8 +50,8 @@ class Particles(object):
         self.amp = np.reshape(np.ones(self.Np), [-1,1])
         self.h = np.reshape(np.zeros(self.Np), [-1,1])
         self.theta_error_sum = np.reshape(np.zeros(self.Np), [-1,1])
-        self.Kp = 1
-        self.Ki = 0.01
+        self.Kp = 1000
+        self.Ki = self.Kp/self.dt/10
         self.sync_matrix = np.zeros([self.Np, self.Np])
         self.update_sync_matrix()
     

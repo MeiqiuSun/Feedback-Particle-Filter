@@ -39,14 +39,14 @@ class CFPF(object):
         self.fpf = []
         self.N = number_of_channels
         for n in range(self.N):
-            self.fpf.append(FPF(number_of_particles=number_of_particles[n], f_min=f_min[n], f_max=f_max[n], sigma_W=sigma_W, dt=dt, h=h))
+            self.fpf.append(FPF(number_of_particles=number_of_particles[n], f_min=f_min[n], f_max=f_max[n], sigma_W=sigma_W, dt=dt, h=h, indep_amp_update=False))
         self.h_hat = np.zeros(len(sigma_W))
         return
 
     def calculate_h_hat(self):
         """Summation of h_hat for all FPF channels"""
         h_hat = np.zeros(self.h_hat.shape)
-        for n in range(self.N):
+        for n in range(self.N):        
             h_hat += self.fpf[n].h_hat
         return h_hat
     
@@ -122,7 +122,7 @@ class Figure(object):
             plt.title('Particles', fontsize=self.fig_property.fontsize+2)
         
         if self.fig_property.plot_freq:
-            fig, axes = plt.subplots(len(self.filtered_signal.freq),1, figsize=(9,7))
+            fig, axes = plt.subplots(len(self.filtered_signal.freq),1, figsize=(9,7), sharex=True)
             freq_axes = self.plot_freq(axes)
             fig.add_subplot(111, frameon=False)
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
@@ -130,7 +130,7 @@ class Figure(object):
             plt.title('Frequency of Particles', fontsize=self.fig_property.fontsize+2)
         
         if self.fig_property.plot_amp:
-            fig, axes = plt.subplots(len(self.filtered_signal.amp),1, figsize=(9,7))
+            fig, axes = plt.subplots(len(self.filtered_signal.amp),1, figsize=(9,7), sharex=True)
             amp_axes = self.plot_amp(axes)
             fig.add_subplot(111, frameon=False)
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
@@ -150,7 +150,7 @@ class Figure(object):
             ax.tick_params(labelsize=self.fig_property.fontsize)
         ax = axes[-1]
         for n in range(len(self.filtered_signal.h_hat_n)):
-            ax.plot(self.signal.t, self.filtered_signal.h_hat_n[n][0,:], label="FPF_{}".format(n+1))
+            ax.plot(self.signal.t, self.filtered_signal.h_hat_n[n][0,:], label="$FPF_{}$".format(n+1))
             ax.legend(fontsize=self.fig_property.fontsize-5)
             ax.tick_params(labelsize=self.fig_property.fontsize)
         return axes
@@ -205,22 +205,23 @@ class Figure(object):
     
 if __name__ == "__main__":
     # N states of frequency inputs
-    freq = [1.2, 3.8]
+    freq = [340, 720]
     # M-by-N amplitude matrix
-    amp = [[10,5]]
+    amp = [[1,0.8]]
     # N states of state noises
-    sigma_B = [0.1,0.1]
+    sigma_B = [0.0001,0.0001]
     # M states of signal noises
-    sigma_W = [0.1]
+    sigma_W = [0.0001]
 
-    T = 10.
-    dt = 0.001
+    T = 1
+    sampling_rate = 16000 # Hz
+    dt = 1./sampling_rate
     signal = Signal(freq=freq, amp=amp, sigma_B=sigma_B, sigma_W=sigma_W, dt=dt, T=T)
     
     number_of_channels = 2
     N = [100, 100]
-    f_max = [1.4, 4]
-    f_min = [1.0, 3.6]
+    f_max = [400, 800]
+    f_min = [280, 640]
     coupled_feedback_particle_filter = CFPF(number_of_channels=number_of_channels, number_of_particles=N, f_min=f_min, f_max=f_max, sigma_W=sigma_W, dt=dt, h=h)
     filtered_signal = coupled_feedback_particle_filter.run(signal.Y)
 
