@@ -3,25 +3,28 @@ Created on Mon Feb. 25, 2019
 
 @author: Heng-Sheng (Hanson) Chang
 """
+from Signal import Signal, Linear
 
 import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
-def a(X):
-    A = np.array([[1,0,1,0],\
-                  [0,1,0,1],\
-                  [0,0,1,0],\
-                  [0,0,0,1]])
-    return np.matmul(A,X)
-
-def h(X):
-    H = np.array([[0,0,0,1]])
-    return np.matmul(H,X)
-
 
 if __name__ == "__main__":
-    X = np.array([1,2,3,4])
-    print(a(X))
-    print(h(X))
+    
+    T = 100.
+    fs = 16
+    dt = 1/fs
+    signal_type = Linear()
+    signal = Signal(a=signal_type.a, b=signal_type.b, h=signal_type.h, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, \
+                    X0=signal_type.X0, u=signal_type.u, dt=dt, T=T)
+                    
+    fontsize = 20
+    fig, ax = plt.subplots(1, 1, figsize=(9,7))
+    for m in range(signal.Y.shape[0]):
+        ax.plot(signal.t, signal.Y[m,:], label='$Y_{}$'.format(m+1))
+    plt.legend(fontsize=fontsize-5)
+    plt.tick_params(labelsize=fontsize)
+    plt.xlabel('time [s]', fontsize=fontsize)
+    plt.show()
