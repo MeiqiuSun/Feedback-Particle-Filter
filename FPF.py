@@ -43,10 +43,12 @@ class FPF(object):
             run(y): Run FPF with time series observations(y)
     """
 
-    def __init__(self, number_of_particles, f_min, f_max, sigma_W, dt, h, indep_amp_update=True):
-        self.particles = Particles(number_of_particles=number_of_particles, f_min=f_min, f_max=f_max, dt=dt) 
-        self.sigma_W = np.reshape(np.array(sigma_W), [len(sigma_W),-1])
+    def __init__(self, number_of_particles, f_min, f_max, sigma_B, sigma_W, f, h, dt, indep_amp_update=True):
+        self.particles = Particles(number_of_particles=number_of_particles, f_min=f_min, f_max=f_max, dt=dt, X0_range=[[0,2],[0,2*np.pi]]) 
+        self.sigma_B = np.reshape(np.array(sigma_B), [1, len(sigma_B)])
+        self.sigma_W = np.reshape(np.array(sigma_W), [1, len(sigma_W)])
         self.dt = dt
+        self.f = f
         self.h = h
         self.h_hat = np.zeros(len(sigma_W))
         self.omega = 2*np.pi*(np.array(f_min)+np.array(f_max))/2
@@ -99,6 +101,13 @@ class FPF(object):
         dI = np.reshape(dI, [dI.shape[0], dI.shape[1], 1])
         return np.reshape(np.matmul(K, dI) + np.matmul(0.5*K*partial_K*self.dt,self.sigma_W**2), [-1,1])
 
+    def optimal_control(self, dI, dh):
+        def calculate_K(self, dh):
+            return 0,0
+        K, partial_K = calculate_K(self, dh)
+        dI = np.reshape(dI, [dI.shape[0], dI.shape[1], 1])
+        return np.reshape(np.matmul(K, dI) + np.matmul(0.5*K*partial_K*self.dt,self.sigma_W**2), [-1,1])
+
     def calculate_h_hat(self):
         """Calculate h for each particle and h_hat by averaging h from all particles"""
         self.particles.h = self.h(self.particles.amp, self.particles.theta)
@@ -124,12 +133,15 @@ class FPF(object):
             argument =
                 y: numpy array with the shape of (M,), new observation data
             variables =
-                dz: numpy array with the shape of (1,M), integral of y over time period dt
-                dI: numpy array with the shape of (N,M), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
+                dz: numpy array with the shape of ( 1,M), integral of y over time period dt
+                dI: numpy array with the shape of (Np,M), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
         """
-        dz = np.reshape(y*self.dt, [1,y.shape[0]])
+        dz = np.reshape(y*self.dt, [1, y.shape[0]])
         dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
         dtheta = self.particles.omega_bar*self.dt + self.correction(dI=dI, dh=self.particles.h-self.h_hat)
+        dX = self.f(self.particles.X)*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
+        dU = self.optimal_control(dI=dI, dh=self.particles.h-self.h_hat)
+        self.particles.X += dX+dU
         self.particles.theta += dtheta
         if self.indep_amp_update:
             #update amplitude indivisually
@@ -279,8 +291,15 @@ class Figure(object):
         ax.plot(sync_particles)
         return ax
 
+def f(X):
+    f_min=0.9
+    f_max=1.1
+    dX = np.zeros(X.shape)
+    dX[:,1] = np.linspace(f_min, f_max, X.shape[0])
+    return 0
+
 def h(amp, x):
-        return amp*np.cos(x)
+    return amp*np.cos(x)
 
 if __name__ == "__main__":
 
@@ -291,7 +310,7 @@ if __name__ == "__main__":
     signal = Signal(f=signal_type.f, h=signal_type.h, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, X0=signal_type.X0, dt=dt, T=T)
     
     N=100
-    feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, sigma_W=signal_type.sigma_W, dt=dt, h=h)
+    feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, f=f, h=h, dt=dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20

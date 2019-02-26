@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 class Particles(object):
     """Particles: particles has a scalar state which denotes phase in [0 2pi] cycle.
-        Initialize = Particles(number_of_particles, f_min, f_max)
+        Initialize = Particles(number_of_particles, f_min, f_max, dt, X0_range)
             number_of_particles: integer, number of particles
             f_min: float, minimum frequency in Hz
             f_max: float, maximum frequency in Hz
@@ -39,10 +39,15 @@ class Particles(object):
             get_freq_range(): return a numpy array with the shape of (Np,) of frequency range (Hz) for Np particles
     """
 
-    def __init__(self, number_of_particles, f_min, f_max, dt):
+    def __init__(self, number_of_particles, f_min, f_max, dt, X0_range):
         """Initialize Particles"""
         self.dt = dt
         self.Np = int(number_of_particles)
+        # initialize X
+        self.X = np.zeros([self.Np, len(X0_range)])
+        for n in range(len(X0_range)):
+            self.X[:,n] = np.linspace(X0_range[n][0], X0_range[n][1], self.Np, endpoint=False)
+        
         self.theta = np.reshape(np.linspace(0, 2*np.pi, self.Np, endpoint=False), [-1,1])
         self.omega_bar = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.Np), [-1,1])
         self.omega = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.Np), [-1,1])
@@ -108,6 +113,9 @@ class Particles(object):
         print(sync_freq/(2*np.pi), sync_index)
         return sync_particles
         # return sync_freq/(2*np.pi), sync_index
+
+    def get_X(self):
+        return np.squeeze(self.X)
 
     def get_theta(self):
         return np.squeeze(self.theta)
