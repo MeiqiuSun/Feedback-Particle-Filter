@@ -4,7 +4,7 @@ Created on Wed Jan. 23, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
-from Signal import Signal
+from Signal import Signal, Sinusoidal
 from Tool import Particles, Struct, isiterable
 
 import numpy as np
@@ -283,22 +283,15 @@ def h(amp, x):
         return amp*np.cos(x)
 
 if __name__ == "__main__":
-    # N states of frequency inputs
-    freq = [340]
-    # M-by-N amplitude matrix
-    amp = [[1]]
-    # N states of state noises
-    sigma_B = [0.0001]
-    # M states of signal noises
-    sigma_W = [0.0001]
 
-    T = 0.01
-    sampling_rate = 16000 # Hz
+    T = 10
+    sampling_rate = 160 # Hz
     dt = 1./sampling_rate
-    signal = Signal(freq=freq, amp=amp, sigma_B=sigma_B, sigma_W=sigma_W, dt=dt, T=T)
+    signal_type = Sinusoidal(dt)
+    signal = Signal(f=signal_type.f, h=signal_type.h, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, X0=signal_type.X0, dt=dt, T=T)
     
     N=100
-    feedback_particle_filter = FPF(number_of_particles=N, f_min=280, f_max=400, sigma_W=sigma_W, dt=dt, h=h)
+    feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, sigma_W=signal_type.sigma_W, dt=dt, h=h)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
