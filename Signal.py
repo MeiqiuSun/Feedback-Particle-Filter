@@ -88,12 +88,69 @@ class Linear(object):
                       [0,1]])
         return np.matmul(H,X)
 
+class Sinusoidal(object):
+    def __init__(self, dt):
+        # N states of state noises
+        self.sigma_B = [0, 0.1]
+        # M states of observation noises
+        self.sigma_W = [0.001]
+        # amplitude
+        self.amp = [1]
+        # frequency
+        self.freq = [1]
+        # initial state condition [A0, theta0]
+        self.X0 = [self.amp[0], 0]
+        # sampling time
+        self.dt = dt
+    
+    # f(X, t): state tansition function maps states(X) to states(X_dot)
+    def f(self, X, t):
+        X_dot = np.zeros(len(self.sigma_B))
+        X_dot[0] = 0
+        X_dot[1] = 2*np.pi*self.freq[0]
+        return X_dot
+    
+    # h(X): observation function maps states(X) to observations(Y)
+    def h(self, X):
+        Y = np.zeros(len(self.sigma_W))
+        Y[0] = X[0]*np.sin(X[1])
+        return Y
+
+class Sinusoidals(object):
+    def __init__(self, dt):
+        # N states of state noises
+        self.sigma_B = [0, 0.1, 0, 0.1]
+        # M states of observation noises
+        self.sigma_W = [0.001]
+        # amplitude
+        self.amp = [1, 3]
+        # frequency
+        self.freq = [1, 2.5]
+        # initial state condition [A0, theta0, A1, theta1]
+        self.X0 = [self.amp[0], 0, self.amp[1], 0]
+        # sampling time
+        self.dt = dt
+    
+    # f(X, t): state tansition function maps states(X) to states(X_dot)
+    def f(self, X, t):
+        X_dot = np.zeros(len(self.sigma_B))
+        X_dot[1] = 2*np.pi*self.freq[0]
+        X_dot[3] = 2*np.pi*self.freq[1]
+        return X_dot
+    
+    # h(X): observation function maps states(X) to observations(Y)
+    def h(self, X):
+        Y = np.zeros(len(self.sigma_W))
+        Y[0] = X[0]*np.sin(X[1]) + X[2]*np.sin(X[3])
+        return Y
+
 if __name__ == "__main__":
     
     T = 10.
     fs = 160
     dt = 1/fs
-    signal_type = Linear(dt)
+    signal_types = {'Linear':Linear, 'Sinusoidal':Sinusoidal, 'Sinusoidals':Sinusoidals}
+    signal_type = signal_types['Sinusoidals'](dt)
     signal = Signal(f=signal_type.f, h=signal_type.h, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, X0=signal_type.X0, dt=dt, T=T)
 
     fontsize = 20
