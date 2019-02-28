@@ -64,7 +64,7 @@ class Particles(object):
     def update(self, theta_error):
         """mod the angle of each particle with 2pi"""
         self.theta = np.mod(self.theta, 2*np.pi)
-        self.X = np.mod(self.X, 2*np.pi)
+        # self.X = np.mod(self.X, 2*np.pi)
         """update omega with PI controller"""
         self.theta_error_sum = theta_error*self.dt + 0.9*self.theta_error_sum
         self.omega += self.Kp*theta_error + self.Ki*self.theta_error_sum

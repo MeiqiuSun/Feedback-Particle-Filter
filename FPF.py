@@ -44,9 +44,10 @@ class FPF(object):
             run(y): Run FPF with time series observations(y)
     """
 
-    def __init__(self, number_of_particles, f_min, f_max, X0_range, sigma_B, sigma_W, f, h, h2, dt, galerkin, indep_amp_update=True):
+    def __init__(self, number_of_particles, f_min, f_max, X0_range, sigma_B, sigma_B2, sigma_W, f, h, h2, dt, galerkin, indep_amp_update=True):
         self.particles = Particles(number_of_particles=number_of_particles, f_min=f_min, f_max=f_max, dt=dt, X0_range=X0_range, M=len(sigma_W)) 
         self.sigma_B = np.array(sigma_B)
+        self.sigma_B2 = np.array(sigma_B2)
         self.sigma_W = np.array(sigma_W)
         self.dt = dt
         self.f = f
@@ -104,9 +105,10 @@ class FPF(object):
             return K, partial_K
         
         K, partial_K = calculate_K(self, dh)
-        # print("old_partial_K", np.squeeze(partial_K))
+        print("old_K", np.mean(K, axis=0))
+        print("old_partial_K", np.mean(partial_K, axis=0))
         dI = np.reshape(dI, [dI.shape[0], dI.shape[1], 1])
-        print("old omega",np.mean(np.matmul(0.5*K*partial_K, self.sigma_W)))
+        print("old Omega",np.mean(np.matmul(0.5*K*partial_K, self.sigma_W)))
         return np.reshape(np.reshape(np.matmul(K, dI), [-1,1]) + np.matmul(0.5*K*partial_K*self.dt, self.sigma_W), [-1,1])
         # return np.reshape(np.matmul(K, dI), [-1,1])
 
@@ -138,8 +140,8 @@ class FPF(object):
                     b[li] = np.mean(normalized_dh*psi[li])
                 return b
             
-            K = np.zeros([self.particles.Np, self.sigma_B.shape[0], self.sigma_W.shape[0]])
-            partial_K = np.zeros([self.particles.Np, self.sigma_B.shape[0], self.sigma_W.shape[0], self.sigma_B.shape[0]])
+            K = np.zeros([self.particles.Np, self.sigma_B2.shape[0], self.sigma_W.shape[0]])
+            partial_K = np.zeros([self.particles.Np, self.sigma_B2.shape[0], self.sigma_W.shape[0], self.sigma_B2.shape[0]])
             psi = self.galerkin.psi(l=0, X=self.particles.X)
             grad_psi = self.galerkin.grad_psi(l=0, X=self.particles.X)
             grad_grad_psi = self.galerkin.grad_grad_psi(l=0, X=self.particles.X)
@@ -153,23 +155,26 @@ class FPF(object):
                     partial_K[:,:,m,:] += c[l]*np.transpose(grad_grad_psi[l], (2,0,1))
             return K, partial_K
         
-        def Omega(self, K, partial_K):
-            omega = np.zeros([self.particles.Np, self.sigma_B.shape[0]])
-            for ni in range(self.sigma_B.shape[0]):
-                for nj in range(self.sigma_B.shape[0]):
-                    print("omega",omega[:,ni].shape, np.sum(K[:,nj,:]*partial_K[:,ni,:,nj], axis=1).shape)
-                    omega[:,ni] += np.sum(K[:,nj,:]*partial_K[:,ni,:,nj]*self.sigma_W, axis=1)
+        def calculate_Omega(self, K, partial_K):
+            Omega = np.zeros([self.particles.Np, self.sigma_B2.shape[0]])
+            print("Initial New Omega shape",Omega.shape)
+            for ni in range(self.sigma_B2.shape[0]):
+                for nj in range(self.sigma_B2.shape[0]):
+                    print("New Omega",Omega[:,ni].shape, np.sum(K[:,nj,:]*partial_K[:,ni,:,nj], axis=1).shape)
+                    Omega[:,ni] += np.sum(K[:,nj,:]*partial_K[:,ni,:,nj]*self.sigma_W, axis=1)
                     # print("Omega_ni",(K[:,nj,:]*partial_K[:,ni,:,nj]).shape)
-            omega = 0.5*omega
-            return omega
+            print("End New Omega shape",Omega.shape)
+            Omega = 0.5*Omega
+            return Omega
 
         K, partial_K = calculate_K(self, self.particles.h2-self.h_hat2)
         dz = np.reshape(np.repeat(dz, repeats=self.particles.Np, axis=0), [self.particles.Np, self.sigma_W.shape[0], 1])
         dI = np.reshape(dI, [dI.shape[0], dI.shape[1], 1])
-        # print("new_partial_K", np.squeeze(partial_K))
-        omega = Omega(self, K, partial_K)
-        print("new Omega", np.mean(omega))
-        return np.reshape(np.matmul(K, dI), [self.particles.Np,self.sigma_B.shape[0]]) + omega*self.dt
+        print("new_K", np.mean(K, axis=0))
+        print("new_partial_K", np.mean(partial_K, axis=0))
+        Omega = calculate_Omega(self, K, partial_K)
+        print("new Omega", np.mean(Omega, axis=0))
+        return np.reshape(np.matmul(K, dI), [self.particles.Np,self.sigma_B2.shape[0]]) + Omega*self.dt
 
     def calculate_h_hat(self):
         """Calculate h for each particle and h_hat by averaging h from all particles"""
@@ -206,15 +211,17 @@ class FPF(object):
                 dI: numpy array with the shape of (Np,M), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
         """
         dz = np.reshape(y*self.dt, [1, y.shape[0]])
-        print("h", self.particles.h.shape, self.particles.h2.shape)
-        print("h_hat", self.h_hat.shape, self.h_hat2.shape)
+        # print("h", self.particles.h.shape, self.particles.h2.shape)
+        # print("h_hat", self.h_hat.shape, self.h_hat2.shape)
         dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
         dI2 = dz-np.repeat(0.5*(self.particles.h2+self.h_hat2)*self.dt, repeats=dz.shape[1], axis=1)
         dtheta = self.particles.omega_bar*self.dt 
         dtheta2 = self.correction(dI=dI, dh=self.particles.h-self.h_hat)
-        # dX = self.f(self.particles.X)*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
+        dX = self.f(self.particles.X)*self.dt + self.sigma_B2*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
         dX = self.f(self.particles.X)*self.dt
         dU = self.optimal_control(dz, dI2)
+        if np.isnan(dU[0,0]):
+            quit()
         # dU = self.optimal_control(dI=dI, dh=self.particles.h-self.h_hat)
         self.particles.X += dX+dU
         self.particles.theta += dtheta+dtheta2
@@ -248,7 +255,7 @@ class FPF(object):
         """
         h_hat = np.zeros(y.shape)
         h_hat2 = np.zeros(y.shape)
-        X = np.zeros([self.particles.Np, self.sigma_B.shape[0], y.shape[1]])
+        X = np.zeros([self.particles.Np, self.sigma_B2.shape[0], y.shape[1]])
         theta = np.zeros([self.particles.Np, y.shape[1]])
         freq = np.zeros([self.particles.Np, y.shape[1]])
         amp = np.zeros([self.particles.Np, y.shape[1]])
@@ -407,18 +414,20 @@ def f(X):
     freq_min=0.9
     freq_max=1.1
     dXdt = np.zeros(X.shape)
-    dXdt[:,1] = np.linspace(freq_min, freq_max, X.shape[0])
+    dXdt[:,0] = np.linspace(freq_min, freq_max, X.shape[0])
+    dXdt[:,1] = np.linspace(freq_min*2*np.pi, freq_max*2*np.pi, X.shape[0])
     return dXdt
 
 def old_h(X):
     return 1*np.cos(X[:,0])
 
 def h(amp, x):
-    return 1*np.cos(x)
+    return amp*np.cos(x)
 
 def h2(X):
     return X[:,0]*np.cos(X[:,1]) 
 
+# 1 state (theta) 2 base functions [cos(theta), sin(theta)]
 class old_Galerkin(object):
     # Galerkin approximation in finite element method
     def __init__(self):
@@ -450,6 +459,7 @@ class old_Galerkin(object):
         else:
             return np.array(grad_grad_trial_functions[l-1])
 
+# 2 states (r, theta) 2 base functions [cos(theta), sin(theta)]
 class Galerkin(object):
     # Galerkin approximation in finite element method
     def __init__(self):
@@ -483,6 +493,44 @@ class Galerkin(object):
         else:
             return np.array(grad_grad_trial_functions[l-1])
 
+# 2 states (r, theta) 3 base functions [r, cos(theta), sin(theta)]
+class new_Galerkin(object):
+    # Galerkin approximation in finite element method
+    def __init__(self):
+        # Ne: int, number of trial (base) functions
+        self.L = 3    
+
+    # trial (base) functions
+    def psi(self, l, X):
+        trial_functions = [X[:,0], np.cos(X[:,1]), np.sin(X[:,1])]
+        if l==0:
+            return np.array(trial_functions)
+        else:
+            return trial_functions[l-1]
+
+    # gradient of trial (base) functions
+    def grad_psi(self, l, X):
+        grad_trial_functions = [[  np.ones(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                [ np.zeros(X[:,0].shape[0]),           -np.sin(X[:,1])],\
+                                [ np.zeros(X[:,0].shape[0]),            np.cos(X[:,1])]]
+        if l==0:
+            return np.array(grad_trial_functions)
+        else:
+            return np.array(grad_trial_functions[l-1])
+    
+    # gradient of gradient of trail (base) functions
+    def grad_grad_psi(self, l, X):
+        grad_grad_trial_functions = [[[np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                      [np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])]],\
+                                     [[np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                      [np.zeros(X[:,0].shape[0]),           -np.cos(X[:,1])]],\
+                                     [[np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                      [np.zeros(X[:,0].shape[0]),           -np.sin(X[:,1])]]]
+        if l==0:
+            return np.array(grad_grad_trial_functions)
+        else:
+            return np.array(grad_grad_trial_functions[l-1])
+
 if __name__ == "__main__":
 
     T = 10
@@ -492,13 +540,14 @@ if __name__ == "__main__":
     signal = Signal(f=signal_type.f, h=signal_type.h, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, X0=signal_type.X0, dt=dt, T=T)
     
     N=100
-    galerkin = old_Galerkin()
+    # galerkin = old_Galerkin()
     # galerkin = Galerkin()
-    # galerkin = multi_frequencies.Galerkin()
+    galerkin = new_Galerkin()
     
-    # X0_range = [[0,2],[0,2*np.pi]]
-    X0_range = [[0,2*np.pi]]
-    feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, X0_range=X0_range, sigma_B=[signal_type.sigma_B[1]], sigma_W=signal_type.sigma_W, f=old_f, h=h, h2=old_h, dt=dt, galerkin=galerkin, indep_amp_update=False)
+    # X0_range = [[0,2*np.pi]]
+    # feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, X0_range=X0_range, sigma_B=[signal_type.sigma_B[1]], sigma_B2=[signal_type.sigma_B[1]], sigma_W=signal_type.sigma_W, f=f, h=h, h2=h2, dt=dt, galerkin=galerkin, indep_amp_update=False)
+    X0_range = [[1,1],[0,2*np.pi]]
+    feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, X0_range=X0_range, sigma_B=[signal_type.sigma_B[1]], sigma_B2=signal_type.sigma_B, sigma_W=signal_type.sigma_W, f=f, h=h, h2=h2, dt=dt, galerkin=galerkin, indep_amp_update=False)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20

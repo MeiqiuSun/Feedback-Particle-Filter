@@ -95,7 +95,7 @@ class Sinusoidal(object):
         # M states of observation noises
         self.sigma_W = [0.001]
         # amplitude
-        self.amp = [1]
+        self.amp = [2]
         # frequency
         self.freq = [1]
         # initial state condition [A0, theta0]
