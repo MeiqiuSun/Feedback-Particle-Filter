@@ -58,10 +58,10 @@ class Signal(object):
                 self.dX[:,k] = np.array(X0)
                 self.X[:,k] = np.array(X0)
             else:
-                self.dX[:,k] = self.f(self.X[:,k-1], self.t[k-1])*self.dt + np.sqrt(self.dt)*np.random.normal(0, self.sigma_B)
+                self.dX[:,k] = self.f(self.X[:,k-1], self.t[k-1])*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt))
                 self.X[:,k] = self.X[:,k-1] + self.dX[:,k]
             # dZ = h(X)*dt + sigma_W*dW
-            self.dZ[:,k] = self.h(self.X[:,k])*self.dt + np.sqrt(self.dt)*np.random.normal(0, self.sigma_W)
+            self.dZ[:,k] = self.h(self.X[:,k])*self.dt + self.sigma_W*np.random.normal(0, np.sqrt(self.dt))
             # Y = dZ/dt = h(X) + white noise with std sigma_W
             self.Y[:,k] = self.dZ[:,k] / self.dt
 

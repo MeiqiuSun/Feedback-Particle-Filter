@@ -13,6 +13,43 @@ import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
+class Galerkin(object):
+    # Galerkin approximation in finite element method
+    def __init__(self):
+        # Ne: int, number of trial (base) functions
+        self.L = 3    
+
+    # trial (base) functions
+    def psi(self, l, X):
+        trial_functions = [X[:,0], np.cos(X[:,1]), np.sin(X[:,1])]
+        if l==0:
+            return np.array(trial_functions)
+        else:
+            return trial_functions[l-1]
+
+    # gradient of trial (base) functions
+    def grad_psi(self, l, X):
+        grad_trial_functions = [[  np.ones(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                [ np.zeros(X[:,0].shape[0]),           -np.sin(X[:,1])],\
+                                [ np.zeros(X[:,0].shape[0]),            np.cos(X[:,1])]]
+        if l==0:
+            return np.array(grad_trial_functions)
+        else:
+            return np.array(grad_trial_functions[l-1])
+    
+    # gradient of gradient of trail (base) functions
+    def grad_grad_psi(self, l, X):
+        grad_grad_trial_functions = [[[np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                      [np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])]],\
+                                     [[np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                      [np.zeros(X[:,0].shape[0]),           -np.cos(X[:,1])]],\
+                                     [[np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                      [np.zeros(X[:,0].shape[0]),           -np.sin(X[:,1])]]]
+        if l==0:
+            return np.array(grad_grad_trial_functions)
+        else:
+            return np.array(grad_grad_trial_functions[l-1])
+
 if __name__ == "__main__":
     # N states of frequency inputs
     freq = [1.2, 3.8]

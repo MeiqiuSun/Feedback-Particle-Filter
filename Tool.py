@@ -39,7 +39,7 @@ class Particles(object):
             get_freq_range(): return a numpy array with the shape of (Np,) of frequency range (Hz) for Np particles
     """
 
-    def __init__(self, number_of_particles, f_min, f_max, dt, X0_range):
+    def __init__(self, number_of_particles, f_min, f_max, dt, X0_range, M):
         """Initialize Particles"""
         self.dt = dt
         self.Np = int(number_of_particles)
@@ -53,7 +53,7 @@ class Particles(object):
         self.omega = 2*np.pi*np.reshape(np.linspace(f_min, f_max, self.Np), [-1,1])
         self.sync_cutoff = np.exp(-(2*np.pi*(f_max-f_min)/(self.Np-1))**2)
         self.amp = np.reshape(np.ones(self.Np), [-1,1])
-        self.h = np.reshape(np.zeros(self.Np), [-1,1])
+        self.h = np.reshape(np.zeros(self.Np), [-1,M])
         self.theta_error_sum = np.reshape(np.zeros(self.Np), [-1,1])
         self.Kp = 1
         self.Ki = self.Kp/self.dt/10
@@ -63,6 +63,7 @@ class Particles(object):
     def update(self, theta_error):
         """mod the angle of each particle with 2pi"""
         self.theta = np.mod(self.theta, 2*np.pi)
+        self.X = np.mod(self.X, 2*np.pi)
         """update omega with PI controller"""
         self.theta_error_sum = theta_error*self.dt + 0.9*self.theta_error_sum
         self.omega += self.Kp*theta_error + self.Ki*self.theta_error_sum
