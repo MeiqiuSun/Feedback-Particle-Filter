@@ -104,9 +104,11 @@ class FPF(object):
             return K, partial_K
         
         K, partial_K = calculate_K(self, dh)
+        # print("old_partial_K", np.squeeze(partial_K))
         dI = np.reshape(dI, [dI.shape[0], dI.shape[1], 1])
-        # return np.reshape(np.matmul(K, dI) + np.matmul(0.5*K*partial_K*self.dt, self.sigma_W), [-1,1])
-        return np.reshape(np.matmul(K, dI), [-1,1])
+        print("old omega",np.mean(np.matmul(0.5*K*partial_K, self.sigma_W)))
+        return np.reshape(np.reshape(np.matmul(K, dI), [-1,1]) + np.matmul(0.5*K*partial_K*self.dt, self.sigma_W), [-1,1])
+        # return np.reshape(np.matmul(K, dI), [-1,1])
 
     def optimal_control(self, dz, dI):
         """calculate the optimal control with new observations(y):
@@ -153,15 +155,21 @@ class FPF(object):
         
         def Omega(self, K, partial_K):
             omega = np.zeros([self.particles.Np, self.sigma_B.shape[0]])
-            for n in range(self.sigma_B.shape[0]):
-                omega[:,n] = 0
+            for ni in range(self.sigma_B.shape[0]):
+                for nj in range(self.sigma_B.shape[0]):
+                    print("omega",omega[:,ni].shape, np.sum(K[:,nj,:]*partial_K[:,ni,:,nj], axis=1).shape)
+                    omega[:,ni] += np.sum(K[:,nj,:]*partial_K[:,ni,:,nj]*self.sigma_W, axis=1)
+                    # print("Omega_ni",(K[:,nj,:]*partial_K[:,ni,:,nj]).shape)
             omega = 0.5*omega
             return omega
 
-        K, partial_K = calculate_K(self, self.particles.h-self.h_hat)
+        K, partial_K = calculate_K(self, self.particles.h2-self.h_hat2)
         dz = np.reshape(np.repeat(dz, repeats=self.particles.Np, axis=0), [self.particles.Np, self.sigma_W.shape[0], 1])
         dI = np.reshape(dI, [dI.shape[0], dI.shape[1], 1])
-        return np.reshape(np.matmul(K, dI), [self.particles.Np,self.sigma_B.shape[0]]) #+ Omega(self, K, partial_K)*self.dt
+        # print("new_partial_K", np.squeeze(partial_K))
+        omega = Omega(self, K, partial_K)
+        print("new Omega", np.mean(omega))
+        return np.reshape(np.matmul(K, dI), [self.particles.Np,self.sigma_B.shape[0]]) + omega*self.dt
 
     def calculate_h_hat(self):
         """Calculate h for each particle and h_hat by averaging h from all particles"""
@@ -171,8 +179,8 @@ class FPF(object):
     
     def calculate_h_hat2(self):
         """Calculate h for each particle and h_hat by averaging h from all particles"""
-        self.particles.h = self.h2(self.particles.X)
-        h_hat = np.mean(self.particles.h, axis=0)
+        self.particles.h2 = np.reshape(self.h2(self.particles.X), [self.particles.Np, self.sigma_W.shape[0]])
+        h_hat = np.mean(self.particles.h2, axis=0)
         return h_hat
 
     def calculate_omega(self):
@@ -198,24 +206,28 @@ class FPF(object):
                 dI: numpy array with the shape of (Np,M), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
         """
         dz = np.reshape(y*self.dt, [1, y.shape[0]])
+        print("h", self.particles.h.shape, self.particles.h2.shape)
+        print("h_hat", self.h_hat.shape, self.h_hat2.shape)
         dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
+        dI2 = dz-np.repeat(0.5*(self.particles.h2+self.h_hat2)*self.dt, repeats=dz.shape[1], axis=1)
         dtheta = self.particles.omega_bar*self.dt 
         dtheta2 = self.correction(dI=dI, dh=self.particles.h-self.h_hat)
-        dX = self.f(self.particles.X)*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
-        # dX = self.f(self.particles.X)*self.dt
-        dU = self.optimal_control(dz, dI)
+        # dX = self.f(self.particles.X)*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
+        dX = self.f(self.particles.X)*self.dt
+        dU = self.optimal_control(dz, dI2)
         # dU = self.optimal_control(dI=dI, dh=self.particles.h-self.h_hat)
         self.particles.X += dX+dU
         self.particles.theta += dtheta+dtheta2
-        print(np.mean(dU, axis=0), np.mean(dtheta2, axis=0))
+        print("dX", np.mean(dX, axis=0), np.mean(dtheta, axis=0))
+        print("dU", np.mean(dU, axis=0), np.mean(dtheta2, axis=0))
         if self.indep_amp_update:
             #update amplitude indivisually
             self.particles.amp -= -1*(y-self.particles.h)*2*self.h(1,self.particles.theta)*self.dt          
         else:
             #update amplitude together
             self.particles.amp -= -1*(y-self.h_hat)*2*np.mean(self.h(1,self.particles.theta))*self.dt
-        self.h_hat2 = self.calculate_h_hat2()
         self.h_hat = self.calculate_h_hat()
+        self.h_hat2 = self.calculate_h_hat2()
         self.omega = self.calculate_omega()
         self.amp = self.calculate_amp()
         # self.particles.X[:,0] = self.amp
@@ -244,6 +256,7 @@ class FPF(object):
         amp_mean = np.zeros([1, y.shape[1]])
 
         for k in range(y.shape[1]):
+            print("===========step {}==============".format(k))
             self.update(y[:,k])
             h_hat[:,k] = self.h_hat
             h_hat2[:,k] = self.h_hat2

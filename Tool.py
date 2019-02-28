@@ -54,6 +54,7 @@ class Particles(object):
         self.sync_cutoff = np.exp(-(2*np.pi*(f_max-f_min)/(self.Np-1))**2)
         self.amp = np.reshape(np.ones(self.Np), [-1,1])
         self.h = np.reshape(np.zeros(self.Np), [-1,M])
+        self.h2 = np.reshape(np.zeros(self.Np), [-1,M])
         self.theta_error_sum = np.reshape(np.zeros(self.Np), [-1,1])
         self.Kp = 1
         self.Ki = self.Kp/self.dt/10
