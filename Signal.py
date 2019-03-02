@@ -90,18 +90,21 @@ class Linear(object):
 
 class Sinusoidal(object):
     def __init__(self, dt):
-        # N states of state noises
-        self.sigma_B = [0, 0.1]
-        # M states of observation noises
-        self.sigma_W = [0.001]
+        # SNR: Signal to Noise ratio
+        self.SNR = [40]
+
         # amplitude
-        self.amp = [2]
+        self.amp = [1]
         # frequency
         self.freq = [1]
         # initial state condition [A0, theta0]
         self.X0 = [self.amp[0], 0]
         # sampling time
         self.dt = dt
+        # N states of state noises
+        self.sigma_B = [0, 0.1]
+        # M states of observation noises
+        self.sigma_W = np.sqrt(np.sum(np.square(self.amp))/np.power(10, np.array(self.SNR)/10))
     
     # f(X, t): state tansition function maps states(X) to states(X_dot)
     def f(self, X, t):
