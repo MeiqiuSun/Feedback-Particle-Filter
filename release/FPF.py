@@ -43,7 +43,7 @@ class FPF(object):
             run(y): Run FPF with time series observations(y)
     """
 
-    def __init__(self, number_of_particles, X0_range, states_constraints, sigma_B, sigma_W, min_sigma_B, min_sigma_W, f, h, dt, galerkin):
+    def __init__(self, number_of_particles, X0_range, states_constraints, f, h, dt, galerkin, sigma_B, sigma_W, min_sigma_B, min_sigma_W):
         self.particles = Particles(number_of_particles=number_of_particles, X0_range=X0_range, states_constraints=states_constraints, M=len(sigma_W), dt=dt) 
         self.sigma_B = np.array(sigma_B).clip(min=min_sigma_B)
         self.sigma_B[1] = 0
@@ -119,17 +119,17 @@ class FPF(object):
     def update(self, y):
         """Update each particle with new observations(y):
             argument =
-                y: numpy array with the shape of (M,), new observation data
+                y: numpy array with the shape of (M,), new observation data at a fixed time
             variables =
                 dz: numpy array with the shape of ( 1,M), integral of y over time period dt
                 dI: numpy array with the shape of (Np,M), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
+                dX: 
+                dU: 
         """
         dz = np.reshape(y*self.dt, [1, y.shape[0]])
         dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
         dX = self.f(self.particles.X)*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
         dU = self.optimal_control(dz, dI)
-        if np.isnan(dU[0,0]):
-            quit()
         self.particles.X += dX+dU
         self.h_hat = self.calculate_h_hat()
         self.particles.update()
@@ -141,11 +141,9 @@ class FPF(object):
                 y: numpy array with the shape of (M,T/dt+1), observations in time series
             Variables = 
                 h_hat: numpy array with the shape of (M,T/dt+1), filtered observations in time series
-                theta: numpy array with the shape of (N,T/dt+1), the angles (rad) for N particles in time series
-                freq: numpy array with the shape of (N,T/dt+1), the updated frequency (Hz) for N particles in time series
-                amp: numpy array with the shape of (N,T/dt+1), the amplitude for N particles in time series
+                X: numpy array with the shape of (N,T/dt+1), the states for N particles in time series
             Return =
-                filtered_signal: Struct(h_hat, theta, freq, amp), filtered observations with information of particles
+                filtered_signal: Struct(h_hat, X), filtered observations with information of particles
         """
         h_hat = np.zeros(y.shape)
         X = np.zeros([self.particles.Np, self.sigma_B.shape[0], y.shape[1]])
@@ -156,8 +154,6 @@ class FPF(object):
             self.update(y[:,k])
             h_hat[:,k] = self.h_hat
             X[:,:,k] = self.particles.X
-            # if k==3:
-            #     quit()
 
         return Struct(h_hat=h_hat, X=X)
 
@@ -252,6 +248,11 @@ class Figure(object):
         ax.plot(sync_particles)
         return ax
 
+def states_constraints(X):
+    X[:,0] = X[:,0].clip(min=0)
+    # X[:,1] = np.mod(X[:,1], 2*np.pi)
+    return X
+
 def f(X):
     freq_min=0.9
     freq_max=1.1
@@ -297,11 +298,6 @@ class Galerkin(object):
         else:
             return np.array(grad_grad_trial_functions[l-1])
 
-def states_constraints(X):
-    X[:,0] = X[:,0].clip(min=0)
-    # X[:,1] = np.mod(X[:,1], 2*np.pi)
-    return X
-
 if __name__ == "__main__":
 
     T = 100
@@ -311,14 +307,11 @@ if __name__ == "__main__":
     signal = Signal(f=signal_type.f, h=signal_type.h, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, X0=signal_type.X0, dt=dt, T=T)
     
     N=10
-    galerkin = Galerkin()
-    
+    X0_range = [[0.5,1.5],[0,2*np.pi]]
     min_sigma_B = 0.05
     min_sigma_W = 0.001
-    X0_range = [[0.5,1.5],[0,2*np.pi]]
-    feedback_particle_filter = FPF(number_of_particles=N, X0_range=X0_range, states_constraints=states_constraints, \
-                                    sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W, \
-                                    f=f, h=h, dt=dt, galerkin=galerkin)
+    feedback_particle_filter = FPF(number_of_particles=N, X0_range=X0_range, states_constraints=states_constraints, f=f, h=h, dt=dt, galerkin=Galerkin(),\
+                                    sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
