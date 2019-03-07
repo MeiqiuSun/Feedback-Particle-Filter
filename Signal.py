@@ -104,7 +104,7 @@ class Sinusoidal(object):
         # N states of state noises
         self.sigma_B = [0, 0.1]
         # M states of observation noises
-        self.sigma_W = np.sqrt(np.sum(np.square(self.amp))/np.power(10, np.array(self.SNR)/10))
+        self.sigma_W = np.sqrt(np.sum(np.square(self.amp))/np.power(10, np.array(self.SNR)/10)).tolist()
     
     # f(X, t): state tansition function maps states(X) to states(X_dot)
     def f(self, X, t):
