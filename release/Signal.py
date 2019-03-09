@@ -37,17 +37,17 @@ class Signal(object):
             dZ: numpy array with the shape of (M,T/dt+1), increment of integral of observations in time series
     """
 
-    def __init__(self, f, h, sigma_B, sigma_W, X0, dt, T):
-        self.dt = dt
+    def __init__(self, signal_type, T):
+        self.dt = signal_type.dt
         self.T = self.dt*int(T/self.dt)
         self.t = np.arange(0, self.T+self.dt, self.dt)
 
-        self.f = f
-        self.h = h
+        self.f = signal_type.f
+        self.h = signal_type.h
         
-        self.sigma_B = np.array(sigma_B)
-        self.sigma_W = np.array(sigma_W)
-        np.reshape(np.array(X0), [len(X0),-1])
+        self.sigma_B = np.array(signal_type.sigma_B)
+        self.sigma_W = np.array(signal_type.sigma_W)
+
         self.dX = np.zeros([self.sigma_B.shape[0], self.t.shape[0]])
         self.X = np.zeros(self.dX.shape)
         self.dZ = np.zeros([self.sigma_W.shape[0], self.t.shape[0]])
@@ -55,8 +55,8 @@ class Signal(object):
         for k in range(self.t.shape[0]):
             # dX = f(X, t)*dt + sigma_B*dB
             if k==0:
-                self.dX[:,k] = np.array(X0)
-                self.X[:,k] = np.array(X0)
+                self.dX[:,k] = np.array(signal_type.X0)
+                self.X[:,k] = np.array(signal_type.X0)
             else:
                 self.dX[:,k] = self.f(self.X[:,k-1], self.t[k-1])*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt))
                 self.X[:,k] = self.X[:,k-1] + self.dX[:,k]
@@ -91,10 +91,10 @@ class Linear(object):
 class Sinusoidal(object):
     def __init__(self, dt):
         # SNR: Signal to Noise ratio
-        self.SNR = [40]
+        self.SNR = [45]
 
         # amplitude
-        self.amp = [1]
+        self.amp = [1.5]
         # frequency
         self.freq = [1]
         # initial state condition [A0, theta0]
@@ -121,18 +121,22 @@ class Sinusoidal(object):
 
 class Sinusoidals(object):
     def __init__(self, dt):
-        # N states of state noises
-        self.sigma_B = [0, 0.1, 0, 0.1]
-        # M states of observation noises
-        self.sigma_W = [0.001]
+        # SNR: Signal to Noise ratio
+        self.SNR = [45]
+        
         # amplitude
         self.amp = [1, 3]
         # frequency
-        self.freq = [1, 2.5]
+        self.freq = [1.2, 3.8]
         # initial state condition [A0, theta0, A1, theta1]
         self.X0 = [self.amp[0], 0, self.amp[1], 0]
         # sampling time
         self.dt = dt
+
+        # N states of state noises
+        self.sigma_B = [0, 0.1, 0, 0.1]
+        # M states of observation noises
+        self.sigma_W = np.sqrt(np.sum(np.square(self.amp))/np.power(10, np.array(self.SNR)/10)).tolist()
     
     # f(X, t): state tansition function maps states(X) to states(X_dot)
     def f(self, X, t):
@@ -154,7 +158,7 @@ if __name__ == "__main__":
     dt = 1/fs
     signal_types = {'Linear':Linear, 'Sinusoidal':Sinusoidal, 'Sinusoidals':Sinusoidals}
     signal_type = signal_types['Sinusoidals'](dt)
-    signal = Signal(f=signal_type.f, h=signal_type.h, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, X0=signal_type.X0, dt=dt, T=T)
+    signal = Signal(signal_type=signal_type, T=T)
 
     fontsize = 20
     fig, ax = plt.subplots(1, 1, figsize=(9,7))
