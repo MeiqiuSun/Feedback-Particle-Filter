@@ -49,7 +49,6 @@ class FPF(object):
         self.M = len(signal_type.sigma_W)
         self.sigma_B = model.modified_sigma_B(np.array(signal_type.sigma_B))
         self.sigma_W = model.modified_sigma_W(np.array(signal_type.sigma_W))
-        print(self.sigma_B, self.sigma_W)
         self.dt = signal_type.dt
 
         self.particles = Particles(number_of_particles=number_of_particles, \
@@ -71,58 +70,84 @@ class FPF(object):
                 partial_K: numpy array with the shape of (Np,N,M,N), partial_K/partial_X for each particle
                 dI: numpy array with the shape of (Np,M,1), inovation process 
         """
-        def calculate_K(self, dh):
+        def calculate_K(self):
+            """calculate the optimal feedback gain function K by using Galerkin Approximation to solve the BVP
+                Variables = 
+                    K: numpy array with the shape of (Np,N,M), gain for each particle
+                    partial_K: numpy array with the shape of (Np,N,M,N), partial_K/partial_X for each particle
+                    psi: numpy array with the shape of (L,Np), base functions psi
+                    grad_psi: numpy array with the shape of (L,N,Np), gradient of base functions psi
+                    grad_grad_psi: numpy array with the shape of (L,N,N,Np), gradient of gradient of base functions psi
+                    A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
+                    b: numpy array with the shape of (L,), b = Exp[normalized_dh*psi] differ from channel to channel (m)
+                    c: numpy array with the shape of (L,), the solution to A*c=b
+            """
             
             def calculate_A(self, grad_psi):
+                """calculate the A matrix in the Galerkin Approximation in Finite Element Method
+                    Arguments = 
+                        grad_psi: numpy array with the shape of (L,N,Np), gradient of base functions psi
+                    Variables =
+                        A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
+                """
                 A = np.zeros([self.galerkin.L, self.galerkin.L])
                 for li in range(self.galerkin.L):
                     for lj in range(li, self.galerkin.L):
-                        A[li,lj] = np.sum(grad_psi[lj]*grad_psi[li])/self.particles.Np
+                        # A[li,lj] = np.sum(grad_psi[lj]*grad_psi[li])/self.particles.Np
+                        A[li,lj] = np.mean(np.sum(grad_psi[lj]*grad_psi[li], axis=0))
                         if not li==lj:
                             A[lj,li] = A[li,lj]
                 return A
             
-            def calculate_b(self, normalized_dh, psi):
+            def calculate_b(self, m, psi):
+                """calculate the b vector in the Galerkin Approximation in Finite Element Method
+                    Arguments = 
+                        m: int, mth of channel (m in [M])
+                        psi: numpy array with the shape of (L,Np), base functions psi
+                    Variables = 
+                        normalized_dh: numpy array with the shape of (Np,), normalized mth channel of filtered observation difference between each particle and mean
+                        b = numpy array with the shape of (L,), b = Exp[normalized_dh*psi]
+                """
+                normalized_dh = (self.particles.h[:,m]-self.h_hat[m])/np.square(self.sigma_W[m])
                 b = np.zeros(self.galerkin.L)
                 for li in range(self.galerkin.L):
                     b[li] = np.mean(normalized_dh*psi[li])
                 return b
             
-            K = np.zeros([self.particles.Np, self.sigma_B.shape[0], self.sigma_W.shape[0]])
-            partial_K = np.zeros([self.particles.Np, self.sigma_B.shape[0], self.sigma_W.shape[0], self.sigma_B.shape[0]])
+            K = np.zeros([self.particles.Np, self.N, self.M])
+            partial_K = np.zeros([self.particles.Np, self.N, self.M, self.N])
             psi = self.galerkin.psi(X=self.particles.X)
             grad_psi = self.galerkin.grad_psi(X=self.particles.X)
             grad_grad_psi = self.galerkin.grad_grad_psi(X=self.particles.X)
             A = calculate_A(self, grad_psi)
-            for m in range(self.sigma_W.shape[0]):
-                b = calculate_b(self, dh[:,m]/self.sigma_W[m], psi)
+            for m in range(self.M):
+                b = calculate_b(self, m, psi)
                 c = np.linalg.solve(A,b)
-                # print("A,b,c=",A,b,c)
                 for l in range(self.galerkin.L):
                     K[:,:,m] += c[l]*np.transpose(grad_psi[l])
                     partial_K[:,:,m,:] += c[l]*np.transpose(grad_grad_psi[l], (2,0,1))
             return K, partial_K
         
-        def calculate_Omega(self, K, partial_K):
-            Omega = np.zeros([self.particles.Np, self.sigma_B.shape[0]])
-            for ni in range(self.sigma_B.shape[0]):
-                for nj in range(self.sigma_B.shape[0]):
-                    Omega[:,ni] += np.sum(K[:,nj,:]*partial_K[:,ni,:,nj]*self.sigma_W, axis=1)
-            Omega = 0.5*Omega
-            return Omega
+        def correction_term(self, K, partial_K):
+            """calculate the Wong-Zakai correction term
+                correction: numpy array with the shape of (Np,N), correction term from Stratonovich form to Ito form
+            """
+            correction = np.zeros([self.particles.Np, self.N])
+            for ni in range(self.N):
+                for nj in range(self.N):
+                    correction[:,ni] += np.sum(K[:,nj,:]*partial_K[:,ni,:,nj]*np.square(self.sigma_W), axis=1)
+            correction = 0.5*correction
+            return correction
 
-        K, partial_K = calculate_K(self, self.particles.h-self.h_hat)
-        dz = np.reshape(np.repeat(dz, repeats=self.particles.Np, axis=0), [self.particles.Np, self.sigma_W.shape[0], 1])
+        K, partial_K = calculate_K(self)
+        dz = np.reshape(np.repeat(dz, repeats=self.particles.Np, axis=0), [self.particles.Np, self.M, 1])
         dI = np.reshape(dI, [dI.shape[0], dI.shape[1], 1])
-        Omega = calculate_Omega(self, K, partial_K)
         
-        # print("K=",np.mean(K, axis=0))
-        # print("partial_K=",np.mean(partial_K, axis=0))
-        return np.reshape(np.matmul(K, dI), [self.particles.Np, self.sigma_B.shape[0]]) + Omega*self.dt
+        return np.reshape(np.matmul(K, dI), [self.particles.Np, self.N]) + correction_term(self, K, partial_K)*self.dt
     
     def calculate_h_hat(self):
         """Calculate h for each particle and h_hat by averaging h from all particles"""
-        self.particles.h = np.reshape(self.h(self.particles.X), [self.particles.Np, self.sigma_W.shape[0]])
+        self.particles.h = np.reshape(self.h(self.particles.X), [self.particles.Np, self.M])
         h_hat = np.mean(self.particles.h, axis=0)
         return h_hat
 
@@ -133,8 +158,8 @@ class FPF(object):
             variables =
                 dz: numpy array with the shape of ( 1,M), integral of y over time period dt
                 dI: numpy array with the shape of (Np,M), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
-                dX: 
-                dU: 
+                dX: numpy array with the shape of (Np,N), states increment for each particle
+                dU: numpy array with the shape of (Np,N), optimal control input for each particle
         """
         dz = np.reshape(y*self.dt, [1, y.shape[0]])
         dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
@@ -143,9 +168,6 @@ class FPF(object):
         self.particles.X += dX+dU
         self.h_hat = self.calculate_h_hat()
         self.particles.update()
-        # print(np.mean(self.particles.X, axis=0))
-        # if np.mean(self.particles.X[:,0])>20:
-        #     quit()
         return
 
     def run(self, y):
@@ -159,21 +181,16 @@ class FPF(object):
                 filtered_signal: Struct(h_hat, X), filtered observations with information of particles
         """
         h_hat = np.zeros(y.shape)
-        X = np.zeros([self.particles.Np, self.sigma_B.shape[0], y.shape[1]])
-        X_average = np.zeros([self.sigma_B.shape[0], y.shape[1]])
+        X = np.zeros([self.particles.Np, self.N, y.shape[1]])
 
         for k in range(y.shape[1]):
             if np.mod(k,int(1/self.dt))==0:
                 print("===========time: {} [s]==============".format(int(k*self.dt)))
-            # print("========={}=======".format(k))
             self.update(y[:,k])
             h_hat[:,k] = self.h_hat
             X[:,:,k] = self.particles.X
-            X_average[:,k] = np.mean(self.particles.X, axis=0)
-            # if k==3:
-            #     quit()
 
-        return Struct(h_hat=h_hat, X=X, X_average=X_average)
+        return Struct(h_hat=h_hat, X=X)
 
 class Figure(object):
     """Figure: Figures for Feedback Partilce Filter
@@ -201,19 +218,25 @@ class Figure(object):
     
     def plot(self):
         if self.fig_property.plot_signal:
-            fig, axes = plt.subplots(self.signal.Y.shape[0], 1, figsize=(9,7), sharex=True)
+            fig, axes = plt.subplots(self.signal.Y.shape[0], 1, figsize=(9,7))
             signal_axes = self.plot_signal(axes)
             fig.add_subplot(111, frameon=False)
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-            plt.xlabel('time [s]', fontsize=self.fig_property.fontsize)
+            plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
 
         if self.fig_property.plot_X:
-            fig, axes = plt.subplots(self.filtered_signal.X.shape[1],1, figsize=(9,7))
+            fig, axes = plt.subplots(self.filtered_signal.X.shape[1],1, figsize=(9,7), sharex=True)
             X_axes = self.plot_X(axes)
+            fig.add_subplot(111, frameon=False)
+            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+            plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
 
         if self.fig_property.plot_histogram:
-            fig, axes = plt.subplots(self.filtered_signal.X.shape[1],1, figsize=(9,7))
+            fig, axes = plt.subplots(self.filtered_signal.X.shape[1],1, figsize=(9,7), sharex=True)
             histogram_axes = self.plot_histogram(axes)
+            fig.add_subplot(111, frameon=False)
+            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+            plt.xlabel('\npercentage', fontsize=self.fig_property.fontsize)
         
         if self.fig_property.show:
             plt.show()
@@ -278,22 +301,22 @@ class Figure(object):
                     # ax.set_xticklabels([0, '$\pi/2$', '$\pi$', '$3\pi/2$', '$2\pi$'])
                 else:
                     state_of_filtered_signal = self.filtered_signal.X[:,i,-1]
-                ax.hist(state_of_filtered_signal, bins=n_bins)
-                ax.yaxis.set_major_formatter(PercentFormatter(xmax=1000))
+                ax.hist(state_of_filtered_signal, bins=n_bins, orientation='horizontal')
+                ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0]))
                 ax.tick_params(labelsize=self.fig_property.fontsize)
         else:
             ax = axes
             ax.hist(self.filtered_signal.X[:, 0,-1], bins=n_bins)
-            ax.yaxis.set_major_formatter(PercentFormatter(xmax=1000))
+            ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0]))
             ax.tick_params(labelsize=self.fig_property.fontsize)
 
         return axes
+
 class Model(object):
     def __init__(self):
         self.N = 2
         self.M = 1
-        # self.X0_range = [[1,2],[0,2*np.pi]]
-        self.X0_range = [[1,2],[0,0]]
+        self.X0_range = [[1,2],[0,2*np.pi]]
         self.min_sigma_B = 0.01
         self.min_sigma_W = 0.1
 
@@ -307,7 +330,6 @@ class Model(object):
         return sigma_W
 
     def states_constraints(self, X):
-        # X[:,0] = X[:,0].clip(min=0)
         # X[:,1] = np.mod(X[:,1], 2*np.pi)
         return X
 
@@ -315,7 +337,6 @@ class Model(object):
         freq_min=0.9
         freq_max=1.1
         dXdt = np.zeros(X.shape)
-        # dXdt[:,0] = np.linspace(freq_min, freq_max, X.shape[0])
         dXdt[:,1] = np.linspace(freq_min*2*np.pi, freq_max*2*np.pi, X.shape[0])
         return dXdt
 
@@ -372,7 +393,7 @@ class Galerkin1(object):    # 2 states (r, theta) 2 base functions [r*cos(theta)
         
 if __name__ == "__main__":
 
-    T = 20
+    T = 10
     sampling_rate = 160 # Hz
     dt = 1./sampling_rate
     signal_type = Sinusoidal(dt)
@@ -383,7 +404,7 @@ if __name__ == "__main__":
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=False, plot_histogram=True)
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True)
     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
     figure.plot()
 

@@ -10,8 +10,7 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 class Signal(object):
-    """
-    Signal:
+    """Signal:
         Notation Notes:
             Nd: dimension of states(X)
             M: number of observations(Y)
@@ -36,7 +35,6 @@ class Signal(object):
             Y: numpy array with the shape of (M,T/dt+1), observations in time series
             dZ: numpy array with the shape of (M,T/dt+1), increment of integral of observations in time series
     """
-
     def __init__(self, signal_type, T):
         self.dt = signal_type.dt
         self.T = self.dt*int(T/self.dt)

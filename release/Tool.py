@@ -4,12 +4,7 @@ Created on Fri Feb. 15, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
-from scipy.signal import find_peaks
 import numpy as np
-import matplotlib
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
-
 
 class Particles(object):
     """Particles:
@@ -59,3 +54,13 @@ def isiterable(object):
     except TypeError: 
         return False
     return True
+
+def find_limits(signals):
+    """find the maximum and minimum of plot limits"""
+    maximums = np.zeros(signals.shape[0])
+    minimums = np.zeros(signals.shape[0])
+    for i in range(signals.shape[0]):
+        maximums[i] = np.max(signals[i])
+        minimums[i] = np.min(signals[i])
+    signal_range = np.max(maximums)-np.min(minimums)
+    return np.min(minimums)-signal_range/10, np.max(maximums)+signal_range/10

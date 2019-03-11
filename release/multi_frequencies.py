@@ -4,9 +4,10 @@ Created on Thu Jan. 31, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
-from FPF import FPF, Figure
-from Signal import Signal, Sinusoidals
 from Tool import Struct
+from FPF import FPF
+from Signal import Signal, Sinusoidals
+from single_frequency import Figure
 
 import numpy as np
 import matplotlib
@@ -19,7 +20,7 @@ class Model(object):
         self.M = 1
         self.X0_range = [[0.5,1.5],[0,2*np.pi],[2.5,3.5],[0,2*np.pi]]
         self.min_sigma_B = 0.01
-        self.min_sigma_W = 0.1
+        self.min_sigma_W = 0.5
 
     def modified_sigma_B(self, sigma_B):
         sigma_B = sigma_B.clip(min=self.min_sigma_B)
@@ -31,9 +32,7 @@ class Model(object):
         return sigma_W
 
     def states_constraints(self, X):
-        # X[:,0] = X[:,0].clip(min=0)
         # X[:,1] = np.mod(X[:,1], 2*np.pi)
-        # X[:,2] = X[:,2].clip(min=0)
         # X[:,3] = np.mod(X[:,3], 2*np.pi)
         return X
 
@@ -96,7 +95,7 @@ if __name__ == "__main__":
     signal_type = Sinusoidals(dt)
     signal = Signal(signal_type=signal_type, T=T)
     
-    Np=1000
+    Np = 1000
     feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin(), signal_type=signal_type)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
