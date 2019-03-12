@@ -17,6 +17,7 @@ class FPF(object):
     """FPF: Feedback Partilce Filter
         Notation Note:
             Np: number of particles
+            N: number of states (x)
             M: number of observations(y)
         Initialize = FPF(number_of_particles, f_min, f_max, sigma_W, dt, h)
             number_of_particles: integer, number of particles
@@ -43,13 +44,12 @@ class FPF(object):
             update(y): Update each particle with new observations(y)
             run(y): Run FPF with time series observations(y)
     """
-
-    def __init__(self, number_of_particles, model, galerkin, signal_type):
-        self.N = len(signal_type.sigma_B)
-        self.M = len(signal_type.sigma_W)
-        self.sigma_B = model.modified_sigma_B(np.array(signal_type.sigma_B))
-        self.sigma_W = model.modified_sigma_W(np.array(signal_type.sigma_W))
-        self.dt = signal_type.dt
+    def __init__(self, number_of_particles, model, galerkin, sigma_B, sigma_W, dt):
+        self.sigma_B = model.modified_sigma_B(np.array(sigma_B))
+        self.sigma_W = model.modified_sigma_W(np.array(sigma_W))
+        self.N = len(self.sigma_B)
+        self.M = len(self.sigma_W)
+        self.dt = dt
 
         self.particles = Particles(number_of_particles=number_of_particles, \
                                     X0_range=model.X0_range, states_constraints=model.states_constraints, \
@@ -82,7 +82,6 @@ class FPF(object):
                     b: numpy array with the shape of (L,), b = Exp[normalized_dh*psi] differ from channel to channel (m)
                     c: numpy array with the shape of (L,), the solution to A*c=b
             """
-            
             def calculate_A(self, grad_psi):
                 """calculate the A matrix in the Galerkin Approximation in Finite Element Method
                     Arguments = 
@@ -400,7 +399,7 @@ if __name__ == "__main__":
     signal = Signal(signal_type=signal_type, T=T)
     
     Np = 1000
-    feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin1(), signal_type=signal_type)
+    feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin1(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20

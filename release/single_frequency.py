@@ -42,14 +42,10 @@ class Figure(object):
         if self.fig_property.plot_signal:
             for m in range(self.signal.Y.shape[0]):
                 fig = plt.figure(figsize=(9,9))
-                # print(fig)
                 ax2 = plt.subplot2grid((4,1),(3,0))
                 ax1 = plt.subplot2grid((4,1),(0,0),rowspan=3, sharex=ax2)
                 signal_axes = self.plot_signal([ax1, ax2], m)
                 plt.setp(ax1.get_xticklabels(), visible=False)
-                # fig = plt.gcf()
-                # fig.figsize=(9,9)
-                # fig.sharex = True
                 fig.add_subplot(111, frameon=False)
                 plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
                 plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
@@ -178,10 +174,11 @@ class Figure(object):
         return axes
 
 class Model(object):
-    def __init__(self):
+    def __init__(self, amp_range, freq_range):
         self.N = 2
         self.M = 1
-        self.X0_range = [[1,2],[0,2*np.pi]]
+        self.X0_range = [amp_range, [0,2*np.pi]]
+        self.freq_range = freq_range
         self.min_sigma_B = 0.01
         self.min_sigma_W = 0.1
 
@@ -199,10 +196,8 @@ class Model(object):
         return X
 
     def f(self, X):
-        freq_min=0.9
-        freq_max=1.1
         dXdt = np.zeros(X.shape)
-        dXdt[:,1] = np.linspace(freq_min*2*np.pi, freq_max*2*np.pi, X.shape[0])
+        dXdt[:,1] = np.linspace(self.freq_range[0]*2*np.pi, self.freq_range[1]*2*np.pi, X.shape[0])
         return dXdt
 
     def h(self, X):
@@ -241,7 +236,10 @@ if __name__ == "__main__":
     signal = Signal(signal_type=signal_type, T=T)
     
     Np = 1000
-    feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin(), signal_type=signal_type)
+    amp_range = [1,2]
+    freq_range = [0.9,1.1]
+    model = Model(amp_range=amp_range, freq_range=freq_range)
+    feedback_particle_filter = FPF(number_of_particles=Np, model=model, galerkin=Galerkin(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20

@@ -96,7 +96,7 @@ if __name__ == "__main__":
     signal = Signal(signal_type=signal_type, T=T)
     
     Np = 1000
-    feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin(), signal_type=signal_type)
+    feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
