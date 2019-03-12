@@ -4,7 +4,7 @@ Created on Wed Feb. 13, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
-from Tool import Struct, isiterable
+from Tool import Struct, isiterable, find_limits
 from FPF import FPF
 from Signal import Signal, Sinusoidals
 from single_frequency import Model, Galerkin
@@ -42,7 +42,7 @@ class CFPF(object):
         self.dt = dt
         for j in range(self.Nc):
             self.fpf.append(FPF(number_of_particles=numbers_of_particles[j], model=models[j], galerkin=galerkins[j], sigma_B=sigma_B[j], sigma_W=sigma_W, dt=self.dt))
-        self.h_hat = np.zeros(len(signal_type.sigma_W))
+        self.h_hat = np.zeros(len(sigma_W))
         return
 
     def calculate_h_hat(self):
@@ -105,33 +105,46 @@ class Figure(object):
     
     def plot(self):
         if self.fig_property.plot_signal:
-            fig, axes = plt.subplots(self.signal.Y.shape[0]+1, 1, figsize=(9,7), sharex=True)
-            signal_axes = self.plot_signal(axes)
-            fig.add_subplot(111, frameon=False)
-            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-            plt.xlabel('time [s]', fontsize=self.fig_property.fontsize)
-        
+            for m in range(self.signal.Y.shape[0]):
+                fig = plt.figure(figsize=(9,9))
+                ax2 = plt.subplot2grid((4,1),(3,0))
+                ax1 = plt.subplot2grid((4,1),(0,0),rowspan=3, sharex=ax2)
+                signal_axes = self.plot_signal([ax1, ax2], m)
+                plt.setp(ax1.get_xticklabels(), visible=False)
+                fig.add_subplot(111, frameon=False)
+                plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+                plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
 
+            # fig, axes = plt.subplots(self.signal.Y.shape[0]+1, 1, figsize=(9,7), sharex=True)
+            # signal_axes = self.plot_signal(axes)
+            # fig.add_subplot(111, frameon=False)
+            # plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+            # plt.xlabel('time [s]', fontsize=self.fig_property.fontsize)
 
         if self.fig_property.show:
             plt.show()
         
         return
 
-    def plot_signal(self, axes):
-        for i, ax in enumerate(axes[0:-1]):
-            ax.plot(self.signal.t, self.signal.Y[i], label=r'signal')
-            ax.plot(self.signal.t, self.filtered_signal.h_hat[i,:], label=r'estimation')
-            ax.legend(fontsize=self.fig_property.fontsize-5)
-            ax.tick_params(labelsize=self.fig_property.fontsize)
-        ax = axes[-1]
-        for n in range(len(self.filtered_signal.h_hat_n)):
-            ax.plot(self.signal.t, self.filtered_signal.h_hat_n[n][0,:], label="$FPF_{}$".format(n+1))
-            ax.legend(fontsize=self.fig_property.fontsize-5)
-            ax.tick_params(labelsize=self.fig_property.fontsize)
+    def plot_signal(self, axes, m):
+        for i, ax in enumerate(axes):
+            if np.mod(i,2)==0:
+                ax.plot(self.signal.t, self.signal.Y[m], color='gray', label=r'signal')
+                ax.plot(self.signal.t, self.filtered_signal.h_hat[-1,m], label=r'estimation')
+                ax.legend(fontsize=self.fig_property.fontsize-5)
+                ax.tick_params(labelsize=self.fig_property.fontsize)
+                minimum, maximum = find_limits(self.signal.Y)
+                ax.set_ylim([minimum, maximum])
+            else:
+                L2_error = np.sqrt(np.cumsum(np.square(self.signal.Y[m]-self.filtered_signal.h_hat[-1,m])*self.signal.dt))
+                ax.plot(self.signal.t,L2_error)
+                ax.tick_params(labelsize=self.fig_property.fontsize)
+                minimum, maximum = find_limits(L2_error)
+                ax.set_ylim([minimum, maximum])
+                ax.set_ylabel('$L_2$ error', fontsize=self.fig_property.fontsize)
         return axes
-
-    
+        
+   
 if __name__ == "__main__":
     
     T = 10
@@ -154,3 +167,10 @@ if __name__ == "__main__":
     
     coupled_feedback_particle_filter = CFPF(number_of_channels=number_of_channels, numbers_of_particles=Np, models=models, galerkins=galerkins, sigma_B=sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
     filtered_signal = coupled_feedback_particle_filter.run(signal.Y)
+
+    fontsize = 20
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=False, plot_histogram=True)
+    figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
+    figure.plot()
+
+    plt.show()
