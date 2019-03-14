@@ -68,6 +68,14 @@ class Figure(object):
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
             plt.xlabel('\npercentage [%]', fontsize=self.fig_property.fontsize)
         
+        
+        if self.fig_property.plot_c:
+            fig, axes = plt.subplots(self.filtered_signal.c.shape[1], self.filtered_signal.c.shape[0], figsize=(9,7), sharex=True)
+            c_axes = self.plot_c(axes)
+            fig.add_subplot(111, frameon=False)
+            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+            plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
+
         if self.fig_property.show:
             plt.show()
         
@@ -83,7 +91,8 @@ class Figure(object):
                 minimum, maximum = find_limits(self.signal.Y)
                 ax.set_ylim([minimum, maximum])
             else:
-                L2_error = np.sqrt(np.cumsum(np.square(self.signal.Y[m]-self.filtered_signal.h_hat[m])*self.signal.dt))
+                L2_error = np.sqrt(np.cumsum(np.square(self.signal.Y[m]-self.filtered_signal.h_hat[m])*self.signal.dt)/self.signal.T)/self.signal.sigma_W[m]
+                # L2_error = np.sqrt(np.square(self.signal.Y[m]-self.filtered_signal.h_hat[m]))/self.signal.sigma_W[m]
                 ax.plot(self.signal.t,L2_error)
                 ax.tick_params(labelsize=self.fig_property.fontsize)
                 minimum, maximum = find_limits(L2_error)
@@ -106,11 +115,9 @@ class Figure(object):
                     minimum, maximum = find_limits(np.mod(self.filtered_signal.X[:,n,:], 2*np.pi))
                     ax.set_ylim([minimum, maximum])
                     ax.set_yticks(np.linspace(0,2*np.pi,5))
+                    ax.set_yticklabels(['$0$','$\pi/2$','$\pi$','$3\pi/2$','$2\pi$'])
                     if int(n/2)==0:
-                        ax.set_yticklabels(['$0$','$\pi/2$','$\pi$','$3\pi/2$','$2\pi$'])
                         ax.set_ylabel(r'$\theta$ [rad]', fontsize=self.fig_property.fontsize)
-                    else:
-                        ax.set_yticklabels('')
                 else:
                     state_of_filtered_signal = self.filtered_signal.X[sampling_number[i],n,:]
                     minimum, maximum = find_limits(self.filtered_signal.X[:,n,:])
@@ -119,16 +126,15 @@ class Figure(object):
                     ax.set_ylim([minimum, maximum])
                     if int(n/2)==0:
                         ax.set_ylabel('$r$    ', fontsize=self.fig_property.fontsize, rotation='horizontal')
-                    else:
-                        ax.set_ylabel('')
                 ax.scatter(self.signal.t, state_of_filtered_signal, s=0.5)
             if np.mod(n,2)==1:
                 state_of_signal = np.mod(self.signal.X[n,:], 2*np.pi)
             else:
                 state_of_signal = self.signal.X[n,:]
             ax.scatter(self.signal.t, state_of_signal, color='black', s=0.5)
+            if np.mod(n,2)==0:
+                ax.set_title(r"$r_{},\theta_{}$".format(int(n/2)+1,int(n/2)+1), fontsize=self.fig_property.fontsize+2)
             ax.tick_params(labelsize=self.fig_property.fontsize)
-        # ax.legend(fontsize=self.fig_property.fontsize-5)
         return axes
 
     def plot_histogram(self, axes):
@@ -145,11 +151,9 @@ class Figure(object):
                     minimum, maximum = find_limits(state_of_filtered_signal)
                     ax.set_ylim([minimum, maximum])
                     ax.set_yticks(np.linspace(0,2*np.pi,5))
+                    ax.set_yticklabels(['$0$','$\pi/2$','$\pi$','$3\pi/2$','$2\pi$'])
                     if int(n/2)==0:
-                        ax.set_yticklabels(['$0$','$\pi/2$','$\pi$','$3\pi/2$','$2\pi$'])
                         ax.set_ylabel(r'$\theta$ [rad]', fontsize=self.fig_property.fontsize)
-                    else:
-                        ax.set_yticklabels('')
                 else:
                     state_of_filtered_signal = self.filtered_signal.X[:,n,:]
                     state_of_signal = self.signal.X[n,:]
@@ -159,12 +163,12 @@ class Figure(object):
                     ax.set_ylim([minimum, maximum])
                     if int(n/2)==0:
                         ax.set_ylabel('$r$    ', fontsize=self.fig_property.fontsize, rotation='horizontal')
-                    else:
-                        ax.set_ylabel('')
                 ax.hist(state_of_filtered_signal[:,-1], bins=n_bins, orientation='horizontal')
                 ax.axhline(y=state_of_signal[-1], color='gray', linestyle='--')
                 ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0], symbol=''))
                 ax.tick_params(labelsize=self.fig_property.fontsize)
+                if np.mod(n,2)==0:
+                    ax.set_title(r"$r_{},\theta_{}$".format(int(n/2)+1,int(n/2)+1), fontsize=self.fig_property.fontsize+2)
         else:
             ax = axes
             ax.hist(self.filtered_signal.X[:, 0,-1], bins=n_bins)
@@ -172,15 +176,51 @@ class Figure(object):
             ax.tick_params(labelsize=self.fig_property.fontsize)
 
         return axes
+    
+    def plot_c(self, axes):
+
+        if isiterable(axes):
+            if self.filtered_signal.c.shape[0]==1:
+                for l in range(self.filtered_signal.c.shape[1]):
+                    ax = axes[l]
+                    ax.plot(self.signal.t, self.filtered_signal.c[0,l,:])
+                    ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
+                    ax.tick_params(labelsize=self.fig_property.fontsize)
+                    minimum, maximum = find_limits(self.filtered_signal.c[0,:,int(self.filtered_signal.c.shape[2]/2):])
+                    ax.set_ylim([minimum, maximum])
+                    ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize)
+                    if l==0:
+                        ax.set_title('$m=1$', fontsize=self.fig_property.fontsize+2)
+            else:
+                for m in range(self.filtered_signal.c.shape[0]):
+                    for l in range(self.filtered_signal.c.shape[1]):
+                        ax = axes[l][m]
+                        ax.plot(self.signal.t, self.filtered_signal.c[m,l,:])
+                        ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
+                        ax.tick_params(labelsize=self.fig_property.fontsize)
+                        minimum, maximum = find_limits(self.filtered_signal.c[m,:,int(self.filtered_signal.c.shape[2]/2):])
+                        ax.set_ylim([minimum, maximum])
+                        ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize)
+                    if l==0:
+                        ax.set_title('$m={}$'.format(m+1), fontsize=self.fig_property.fontsize+2)
+        else:
+            ax = axes
+            ax.plot(self.signal.t, self.filtered_signal.c[0,0,:])
+            ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
+            ax.tick_params(labelsize=self.fig_property.fontsize)
+            minimum, maximum = find_limits(self.filtered_signal.c[0,0,int(self.filtered_signal.c.shape[2]/2):])
+            ax.set_ylim([minimum, maximum])
+            ax.set_ylabel('$c$', fontsize=self.fig_property.fontsize)
+        return axes
 
 class Model(object):
-    def __init__(self, amp_range, freq_range):
+    def __init__(self, amp_range, freq_range, min_sigma_B=0.01, min_sigma_W=0.1):
         self.N = 2
         self.M = 1
         self.X0_range = [amp_range, [0,2*np.pi]]
         self.freq_range = freq_range
-        self.min_sigma_B = 0.01
-        self.min_sigma_W = 0.1
+        self.min_sigma_B = min_sigma_B
+        self.min_sigma_W = min_sigma_W
 
     def modified_sigma_B(self, sigma_B):
         sigma_B = sigma_B.clip(min=self.min_sigma_B)
@@ -229,21 +269,21 @@ class Galerkin(object):    # 2 states (r, theta) 2 base functions [r*cos(theta),
         
 if __name__ == "__main__":
 
-    T = 10
+    T = 5
     sampling_rate = 160 # Hz
     dt = 1./sampling_rate
     signal_type = Sinusoidal(dt)
     signal = Signal(signal_type=signal_type, T=T)
     
     Np = 1000
-    amp_range = [1,2]
-    freq_range = [0.9,1.1]
+    amp_range = [0.5,1.5]
+    freq_range = [1.1,1.3]
     model = Model(amp_range=amp_range, freq_range=freq_range)
     feedback_particle_filter = FPF(number_of_particles=Np, model=model, galerkin=Galerkin(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True)
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True, plot_c=True)
     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
     figure.plot()
 

@@ -86,10 +86,72 @@ class Galerkin(object):
                                       [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),                     np.cos(X[:,3])],\
                                       [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]),            np.cos(X[:,3]), -np.power(X[:,2],1)*np.sin(X[:,3])]]]
         return np.array(grad_grad_trial_functions)
-   
+
+ # 4 states (r1, theta1, r2, theta2) 4 base functions [r1*cos(theta1), r1*sin(theta1), r2*cos(theta2), r2*sin(theta2)]
+
+# 4 states (r1, theta1, r2, theta2) 8 base functions [r1*cos(theta1), r1*sin(theta1), r2*cos(theta2), r2*sin(theta2), cos(theta1+theta2), sin(theta1+theta2), cos(theta1-theta2), sin(theta1-theta2)]
+class Galerkin_test(object):
+    # Galerkin approximation in finite element method
+    def __init__(self):
+        # L: int, number of trial (base) functions
+        self.L = 8       # trial (base) functions
+        
+    def psi(self, X):
+        trial_functions = [ np.power(X[:,0],1)*np.cos(X[:,1]), np.power(X[:,0],1)*np.sin(X[:,1]), np.power(X[:,2],1)*np.cos(X[:,3]), np.power(X[:,2],1)*np.sin(X[:,3]),\
+                            np.cos(X[:,1]+X[:,3]), np.sin(X[:,1]+X[:,3]), np.cos(X[:,1]-X[:,3]), np.sin(X[:,1]-X[:,3])]
+        return np.array(trial_functions)
+        
+    # gradient of trial (base) functions
+    def grad_psi(self, X):
+        grad_trial_functions = [[            np.cos(X[:,1]), -np.power(X[:,0],1)*np.sin(X[:,1]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                [            np.sin(X[:,1]),  np.power(X[:,0],1)*np.cos(X[:,1]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]),            np.cos(X[:,3]), -np.power(X[:,2],1)*np.sin(X[:,3])],\
+                                [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]),            np.sin(X[:,3]),  np.power(X[:,2],1)*np.cos(X[:,3])],\
+                                [ np.zeros(X[:,0].shape[0]),             -np.sin(X[:,1]+X[:,3]), np.zeros(X[:,0].shape[0]),             -np.sin(X[:,1]+X[:,3])],\
+                                [ np.zeros(X[:,0].shape[0]),              np.cos(X[:,1]+X[:,3]), np.zeros(X[:,0].shape[0]),              np.cos(X[:,1]+X[:,3])],\
+                                [ np.zeros(X[:,0].shape[0]),             -np.sin(X[:,1]-X[:,3]), np.zeros(X[:,0].shape[0]),              np.sin(X[:,1]-X[:,3])],\
+                                [ np.zeros(X[:,0].shape[0]),              np.cos(X[:,1]-X[:,3]), np.zeros(X[:,0].shape[0]),             -np.cos(X[:,1]-X[:,3])]]
+        return np.array(grad_trial_functions)
+
+    # gradient of gradient of trail (base) functions
+    def grad_grad_psi(self, X):
+        grad_grad_trial_functions = [[[ np.zeros(X[:,0].shape[0]),                    -np.sin(X[:,1]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [           -np.sin(X[:,1]), -np.power(X[:,0],1)*np.cos(X[:,1]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),                     np.cos(X[:,1]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [            np.cos(X[:,1]), -np.power(X[:,0],1)*np.sin(X[:,1]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),                    -np.sin(X[:,3])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]),           -np.sin(X[:,3]), -np.power(X[:,2],1)*np.cos(X[:,3])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),                     np.cos(X[:,3])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]),            np.cos(X[:,3]), -np.power(X[:,2],1)*np.sin(X[:,3])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),             -np.cos(X[:,1]+X[:,3]), np.zeros(X[:,2].shape[0]),             -np.cos(X[:,1]+X[:,3])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),             -np.cos(X[:,1]+X[:,3]),            np.cos(X[:,3]),             -np.cos(X[:,1]+X[:,3])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),             -np.sin(X[:,1]+X[:,3]), np.zeros(X[:,2].shape[0]),             -np.sin(X[:,1]+X[:,3])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),             -np.sin(X[:,1]+X[:,3]),            np.cos(X[:,3]),             -np.sin(X[:,1]+X[:,3])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),             -np.cos(X[:,1]-X[:,3]), np.zeros(X[:,2].shape[0]),              np.cos(X[:,1]-X[:,3])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),              np.cos(X[:,1]-X[:,3]),            np.cos(X[:,3]),             -np.cos(X[:,1]-X[:,3])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),             -np.sin(X[:,1]-X[:,3]), np.zeros(X[:,2].shape[0]),              np.sin(X[:,1]-X[:,3])],\
+                                      [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0]),          np.zeros(X[:,3].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),              np.sin(X[:,1]-X[:,3]),            np.cos(X[:,3]),             -np.sin(X[:,1]-X[:,3])]]]
+        return np.array(grad_grad_trial_functions)
+
 if __name__ == "__main__":
 
-    T = 10
+    T = 5
     fs = 160
     dt = 1/fs
     signal_type = Sinusoidals(dt)
@@ -97,10 +159,11 @@ if __name__ == "__main__":
     
     Np = 1000
     feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
+    # feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin_test(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True)
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True, plot_c=True)
     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
     figure.plot()
     

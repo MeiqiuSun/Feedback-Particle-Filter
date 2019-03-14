@@ -57,6 +57,7 @@ class FPF(object):
         self.f = model.f
         self.h = model.h
         self.galerkin = galerkin
+        self.c = np.zeros([self.M, self.galerkin.L])
         self.h_hat = np.zeros(self.M)
     
     def optimal_control(self, dz, dI):
@@ -79,8 +80,8 @@ class FPF(object):
                     grad_psi: numpy array with the shape of (L,N,Np), gradient of base functions psi
                     grad_grad_psi: numpy array with the shape of (L,N,N,Np), gradient of gradient of base functions psi
                     A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
-                    b: numpy array with the shape of (L,), b = Exp[normalized_dh*psi] differ from channel to channel (m)
-                    c: numpy array with the shape of (L,), the solution to A*c=b
+                    b: numpy array with the shape of (M,L), b = Exp[normalized_dh*psi] differ from channel to channel (m)
+                    c: numpy array with the shape of (M,L), the solution to A*c=b
             """
             def calculate_A(self, grad_psi):
                 """calculate the A matrix in the Galerkin Approximation in Finite Element Method
@@ -96,6 +97,10 @@ class FPF(object):
                         A[li,lj] = np.mean(np.sum(grad_psi[lj]*grad_psi[li], axis=0))
                         if not li==lj:
                             A[lj,li] = A[li,lj]
+                if np.linalg.det(A)==0:
+                    A += np.diag(0.01*np.random.randn(self.galerkin.L))
+                # np.set_printoptions(precision=1)
+                # print(A)
                 return A
             
             def calculate_b(self, m, psi):
@@ -119,12 +124,15 @@ class FPF(object):
             grad_psi = self.galerkin.grad_psi(X=self.particles.X)
             grad_grad_psi = self.galerkin.grad_grad_psi(X=self.particles.X)
             A = calculate_A(self, grad_psi)
+            b = np.zeros([self.M, self.galerkin.L])
+            c = np.zeros([self.M, self.galerkin.L])
             for m in range(self.M):
-                b = calculate_b(self, m, psi)
-                c = np.linalg.solve(A,b)
+                b[m] = calculate_b(self, m, psi)
+                c[m] = np.linalg.solve(A,b[m])
                 for l in range(self.galerkin.L):
-                    K[:,:,m] += c[l]*np.transpose(grad_psi[l])
-                    partial_K[:,:,m,:] += c[l]*np.transpose(grad_grad_psi[l], (2,0,1))
+                    K[:,:,m] += c[m,l]*np.transpose(grad_psi[l])
+                    partial_K[:,:,m,:] += c[m,l]*np.transpose(grad_grad_psi[l], (2,0,1))
+            self.c = c
             return K, partial_K
         
         def correction_term(self, K, partial_K):
@@ -181,15 +189,16 @@ class FPF(object):
         """
         h_hat = np.zeros(y.shape)
         X = np.zeros([self.particles.Np, self.N, y.shape[1]])
-
+        c = np.zeros([self.M, self.galerkin.L, y.shape[1]])
         for k in range(y.shape[1]):
             if np.mod(k,int(1/self.dt))==0:
                 print("===========time: {} [s]==============".format(int(k*self.dt)))
             self.update(y[:,k])
             h_hat[:,k] = self.h_hat
             X[:,:,k] = self.particles.X
+            c[:,:,k] = self.c
 
-        return Struct(h_hat=h_hat, X=X)
+        return Struct(h_hat=h_hat, X=X, c=c)
 
 class Figure(object):
     """Figure: Figures for Feedback Partilce Filter
@@ -237,6 +246,13 @@ class Figure(object):
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
             plt.xlabel('\npercentage', fontsize=self.fig_property.fontsize)
         
+        if self.fig_property.plot_c:
+            fig, axes = plt.subplots(self.signal.Y.shape[0],1, figsize=(9,7))
+            c_axes = self.plot_c(axes)
+            fig.add_subplot(111, frameon=False)
+            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+            plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
+
         if self.fig_property.show:
             plt.show()
         
@@ -274,10 +290,6 @@ class Figure(object):
                     else:
                         state_of_filtered_signal = self.filtered_signal.X[k,i,:]
                     ax.scatter(self.signal.t, state_of_filtered_signal, s=0.5)
-                if np.mod(i,2)==1:
-                    state_of_filtered_signal = np.mod(self.filtered_signal.X_average[i,:], 2*np.pi)
-                else:
-                    state_of_filtered_signal = self.filtered_signal.X_average[i,:]
                 # ax.scatter(self.signal.t, state_of_filtered_signal, s=5, color='magenta', label='mean')
                 ax.tick_params(labelsize=self.fig_property.fontsize)
                 # ax.legend(fontsize=self.fig_property.fontsize-5)
@@ -309,6 +321,27 @@ class Figure(object):
             ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0]))
             ax.tick_params(labelsize=self.fig_property.fontsize)
 
+        return axes
+
+    def plot_c(self, axes):
+        if isiterable(axes):
+            for m, ax in enumerate(axes):
+                ax.plot(self.signal.t, self.filtered_signal.c[m,:], color='magenta', label='$_{}c$'.format(m+1))
+                ax.legend(fontsize=self.fig_property.fontsize-5)
+                ax.tick_params(labelsize=self.fig_property.fontsize)
+                maximum = np.max(self.filtered_signal.c[m])
+                minimum = np.min(self.filtered_signal.c[m])
+                signal_range = maximum-minimum
+                ax.set_ylim([minimum-signal_range/10, maximum+signal_range/10])
+        else:
+            ax = axes
+            ax.plot(self.signal.t, self.filtered_signal.c[0,:], color='magenta')
+            ax.legend(fontsize=self.fig_property.fontsize-5)
+            ax.tick_params(labelsize=self.fig_property.fontsize)
+            maximum = np.max(self.filtered_signal.c[0])
+            minimum = np.min(self.filtered_signal.c[0])
+            signal_range = maximum-minimum
+            ax.set_ylim([minimum-signal_range/10, maximum+signal_range/10])
         return axes
 
 class Model(object):
@@ -403,7 +436,7 @@ if __name__ == "__main__":
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True)
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True, plot_c=True)
     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
     figure.plot()
 

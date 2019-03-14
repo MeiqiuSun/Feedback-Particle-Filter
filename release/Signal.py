@@ -92,9 +92,9 @@ class Sinusoidal(object):
         self.SNR = [45]
 
         # amplitude
-        self.amp = [1.5]
+        self.amp = [1]
         # frequency
-        self.freq = [1]
+        self.freq = [1.2]
         # initial state condition [A0, theta0]
         self.X0 = [self.amp[0], 0]
         # sampling time
