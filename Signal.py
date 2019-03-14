@@ -94,7 +94,7 @@ class Sinusoidal(object):
         self.SNR = [40]
 
         # amplitude
-        self.amp = [1]
+        self.amp = [1.5]
         # frequency
         self.freq = [1]
         # initial state condition [A0, theta0]

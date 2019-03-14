@@ -365,16 +365,16 @@ class Figure(object):
             for i, ax in enumerate(axes):
                 for k in range(self.filtered_signal.X.shape[0]):
                     ax.scatter(self.signal.t, np.mod(self.filtered_signal.X[k,i,:], 2*np.pi), s=0.5)
-                ax.plot(self.signal.t, np.mod(np.mean(self.filtered_signal.X[:,i,:], axis=0), 2*np.pi), label='mean')
+                # ax.plot(self.signal.t, np.mod(np.mean(self.filtered_signal.X[:,i,:], axis=0), 2*np.pi), label='mean')
                 ax.tick_params(labelsize=self.fig_property.fontsize)
-                ax.legend(fontsize=self.fig_property.fontsize-5)
+                # ax.legend(fontsize=self.fig_property.fontsize-5)
         else:
             ax = axes
             for k in range(self.filtered_signal.X.shape[0]):
                 ax.scatter(self.signal.t, self.filtered_signal.X[k,0,:], s=0.5)
-            ax.plot(self.signal.t, np.mean(self.filtered_signal.X[:,i,:], axis=0), label='mean')
+            # ax.plot(self.signal.t, np.mean(self.filtered_signal.X[:,i,:], axis=0), label='mean')
             ax.tick_params(labelsize=self.fig_property.fontsize)
-            ax.legend(fontsize=self.fig_property.fontsize-5)
+            # ax.legend(fontsize=self.fig_property.fontsize-5)
         return axes
 
     def plot_theta(self, ax):
@@ -440,7 +440,7 @@ def h(amp, x):
     return amp*np.cos(x)
 
 def h2(X):
-    return np.absolute(X[:,0])*np.cos(X[:,1]) 
+    return X[:,0]*np.cos(X[:,1]) 
 
 # 1 state (theta) 2 base functions [cos(theta), sin(theta)]
 class old_Galerkin(object):
@@ -490,8 +490,8 @@ class Galerkin3(object):
 
     # gradient of trial (base) functions
     def grad_psi(self, l, X):
-        grad_trial_functions = [[ 1/2*np.power(X[:,0],2)*np.cos(X[:,1]), -1/6*np.power(X[:,0],3)*X[:,0]*np.sin(X[:,1])],\
-                                [ 1/2*np.power(X[:,0],2)*np.sin(X[:,1]),  1/6*np.power(X[:,0],3)*X[:,0]*np.cos(X[:,1])]]
+        grad_trial_functions = [[ 1/2*np.power(X[:,0],2)*np.cos(X[:,1]), -1/6*np.power(X[:,0],3)*np.sin(X[:,1])],\
+                                [ 1/2*np.power(X[:,0],2)*np.sin(X[:,1]),  1/6*np.power(X[:,0],3)*np.cos(X[:,1])]]
         if l==0:
             return np.array(grad_trial_functions)
         else:
@@ -524,8 +524,8 @@ class Galerkin2(object):
 
     # gradient of trial (base) functions
     def grad_psi(self, l, X):
-        grad_trial_functions = [[ np.power(X[:,0],1)*np.cos(X[:,1]), -1/2*np.power(X[:,0],2)*X[:,0]*np.sin(X[:,1])],\
-                                [ np.power(X[:,0],1)*np.sin(X[:,1]),  1/2*np.power(X[:,0],2)*X[:,0]*np.cos(X[:,1])]]
+        grad_trial_functions = [[ np.power(X[:,0],1)*np.cos(X[:,1]), -1/2*np.power(X[:,0],2)*np.sin(X[:,1])],\
+                                [ np.power(X[:,0],1)*np.sin(X[:,1]),  1/2*np.power(X[:,0],2)*np.cos(X[:,1])]]
         if l==0:
             return np.array(grad_trial_functions)
         else:
@@ -536,7 +536,7 @@ class Galerkin2(object):
         grad_grad_trial_functions = [[[                     np.cos(X[:,1]),     -np.power(X[:,0],1)*np.sin(X[:,1])],\
                                       [ -np.power(X[:,0],1)*np.sin(X[:,1]), -1/2*np.power(X[:,0],2)*np.cos(X[:,1])]],\
                                      [[                     np.sin(X[:,1]),      np.power(X[:,0],1)*np.cos(X[:,1])],\
-                                      [  np.power(X[:,0],1)*np.cos(X[:,1]), -1/2*np.power(X[:,0],1)*np.sin(X[:,1])]]]
+                                      [  np.power(X[:,0],1)*np.cos(X[:,1]), -1/2*np.power(X[:,0],2)*np.sin(X[:,1])]]]
         if l==0:
             return np.array(grad_grad_trial_functions)
         else:
@@ -558,8 +558,8 @@ class Galerkin1(object):
 
     # gradient of trial (base) functions
     def grad_psi(self, l, X):
-        grad_trial_functions = [[ np.cos(X[:,1]), -np.power(X[:,0],1)*X[:,0]*np.sin(X[:,1])],\
-                                [ np.sin(X[:,1]),  np.power(X[:,0],1)*X[:,0]*np.cos(X[:,1])]]
+        grad_trial_functions = [[ np.cos(X[:,1]), -np.power(X[:,0],1)*np.sin(X[:,1])],\
+                                [ np.sin(X[:,1]),  np.power(X[:,0],1)*np.cos(X[:,1])]]
         if l==0:
             return np.array(grad_trial_functions)
         else:
@@ -567,10 +567,10 @@ class Galerkin1(object):
     
     # gradient of gradient of trail (base) functions
     def grad_grad_psi(self, l, X):
-        grad_grad_trial_functions = [[[ np.zeros(X[:,0].shape[0]), -np.sin(X[:,1])],\
-                                      [           -np.sin(X[:,1]), -np.cos(X[:,1])]],\
-                                     [[ np.zeros(X[:,0].shape[0]),  np.cos(X[:,1])],\
-                                      [            np.cos(X[:,1]), -np.sin(X[:,1])]]]
+        grad_grad_trial_functions = [[[ np.zeros(X[:,0].shape[0]),                     -np.sin(X[:,1])],\
+                                      [           -np.sin(X[:,1]), -np.power(X[:,0],1)*np.cos(X[:,1])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),                      np.cos(X[:,1])],\
+                                      [            np.cos(X[:,1]), -np.power(X[:,0],1)*np.sin(X[:,1])]]]
         if l==0:
             return np.array(grad_grad_trial_functions)
         else:
@@ -616,7 +616,7 @@ class new_Galerkin(object):
 
 if __name__ == "__main__":
 
-    T = 100
+    T = 20
     sampling_rate = 160 # Hz
     dt = 1./sampling_rate
     signal_type = Sinusoidal(dt)
@@ -624,14 +624,14 @@ if __name__ == "__main__":
     
     N=10
     # galerkin = old_Galerkin()
-    galerkin = Galerkin2()
+    galerkin = Galerkin1()
     # galerkin = new_Galerkin()
     
     # X0_range = [[0,2*np.pi]]
     # feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, X0_range=X0_range, sigma_B=[signal_type.sigma_B[1]], sigma_B2=[signal_type.sigma_B[1]], sigma_W=signal_type.sigma_W, f=f, h=h, h2=h2, dt=dt, galerkin=galerkin, indep_amp_update=False)
     min_sigma_B = 0.05
     min_sigma_W = 0.001
-    X0_range = [[0.5,1.5],[0,2*np.pi]]
+    X0_range = [[1.4,1.6],[0,2*np.pi]]
     feedback_particle_filter = FPF(number_of_particles=N, f_min=0.9, f_max=1.1, X0_range=X0_range, sigma_B=[signal_type.sigma_B[1]], sigma_B2=signal_type.sigma_B, sigma_W=signal_type.sigma_W, min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W, f=f, h=h, h2=h2, dt=dt, galerkin=galerkin, indep_amp_update=False)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
