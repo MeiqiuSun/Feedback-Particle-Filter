@@ -5,7 +5,7 @@ Created on Wed Jan. 23, 2019
 """
 
 from Signal import Signal, Sinusoidal
-from Tool import Particles, Struct, isiterable
+from Tool import Particles, Struct, isiterable, find_limits
 
 import numpy as np
 import matplotlib
@@ -188,6 +188,7 @@ class FPF(object):
                 filtered_signal: Struct(h_hat, X), filtered observations with information of particles
         """
         h_hat = np.zeros(y.shape)
+        h = np.zeros([self.particles.Np, self.M, y.shape[1]])
         X = np.zeros([self.particles.Np, self.N, y.shape[1]])
         c = np.zeros([self.M, self.galerkin.L, y.shape[1]])
         for k in range(y.shape[1]):
@@ -195,10 +196,11 @@ class FPF(object):
                 print("===========time: {} [s]==============".format(int(k*self.dt)))
             self.update(y[:,k])
             h_hat[:,k] = self.h_hat
+            h[:,:,k] = self.particles.h
             X[:,:,k] = self.particles.X
             c[:,:,k] = self.c
 
-        return Struct(h_hat=h_hat, X=X, c=c)
+        return Struct(h_hat=h_hat, h=h, X=X, c=c)
 
 class Figure(object):
     """Figure: Figures for Feedback Partilce Filter
@@ -247,7 +249,7 @@ class Figure(object):
             plt.xlabel('\npercentage', fontsize=self.fig_property.fontsize)
         
         if self.fig_property.plot_c:
-            fig, axes = plt.subplots(self.signal.Y.shape[0],1, figsize=(9,7))
+            fig, axes = plt.subplots(self.filtered_signal.c.shape[1], self.filtered_signal.c.shape[0], figsize=(9,7), sharex=True)
             c_axes = self.plot_c(axes)
             fig.add_subplot(111, frameon=False)
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
@@ -285,39 +287,27 @@ class Figure(object):
         if isiterable(axes):
             for i, ax in enumerate(axes):
                 for k in range(self.filtered_signal.X.shape[0]):
-                    if np.mod(i,2)==1:
-                        state_of_filtered_signal = np.mod(self.filtered_signal.X[k,i,:], 2*np.pi)
-                    else:
-                        state_of_filtered_signal = self.filtered_signal.X[k,i,:]
+                    state_of_filtered_signal = self.filtered_signal.X[k,i,:]
                     ax.scatter(self.signal.t, state_of_filtered_signal, s=0.5)
-                # ax.scatter(self.signal.t, state_of_filtered_signal, s=5, color='magenta', label='mean')
                 ax.tick_params(labelsize=self.fig_property.fontsize)
-                # ax.legend(fontsize=self.fig_property.fontsize-5)
         else:
             ax = axes
             for k in range(self.filtered_signal.X.shape[0]):
                 ax.scatter(self.signal.t, self.filtered_signal.X[k,0,:], s=0.5)
-            # ax.scatter(self.signal.t, self.filtered_signal.X_average[0,:], s=5, color='magenta', label='mean')
             ax.tick_params(labelsize=self.fig_property.fontsize)
-            # ax.legend(fontsize=self.fig_property.fontsize-5)
         return axes
 
     def plot_histogram(self, axes):
         n_bins = 100
         if isiterable(axes):
             for i, ax in enumerate(axes):
-                if np.mod(i,2)==1:
-                    state_of_filtered_signal = np.mod(self.filtered_signal.X[:,i,-1], 2*np.pi)
-                    # ax.set_xticks(np.arange(0,2*np.pi,5))
-                    # ax.set_xticklabels([0, '$\pi/2$', '$\pi$', '$3\pi/2$', '$2\pi$'])
-                else:
-                    state_of_filtered_signal = self.filtered_signal.X[:,i,-1]
+                state_of_filtered_signal = self.filtered_signal.X[:,i,-1]
                 ax.hist(state_of_filtered_signal, bins=n_bins, orientation='horizontal')
                 ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0]))
                 ax.tick_params(labelsize=self.fig_property.fontsize)
         else:
             ax = axes
-            ax.hist(self.filtered_signal.X[:, 0,-1], bins=n_bins)
+            ax.hist(self.filtered_signal.X[:, 0,-1], bins=n_bins, orientation='horizontal')
             ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0]))
             ax.tick_params(labelsize=self.fig_property.fontsize)
 
@@ -325,23 +315,37 @@ class Figure(object):
 
     def plot_c(self, axes):
         if isiterable(axes):
-            for m, ax in enumerate(axes):
-                ax.plot(self.signal.t, self.filtered_signal.c[m,:], color='magenta', label='$_{}c$'.format(m+1))
-                ax.legend(fontsize=self.fig_property.fontsize-5)
-                ax.tick_params(labelsize=self.fig_property.fontsize)
-                maximum = np.max(self.filtered_signal.c[m])
-                minimum = np.min(self.filtered_signal.c[m])
-                signal_range = maximum-minimum
-                ax.set_ylim([minimum-signal_range/10, maximum+signal_range/10])
+            if self.filtered_signal.c.shape[0]==1:
+                for l in range(self.filtered_signal.c.shape[1]):
+                    ax = axes[l]
+                    ax.plot(self.signal.t, self.filtered_signal.c[0,l,:])
+                    ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
+                    ax.tick_params(labelsize=self.fig_property.fontsize)
+                    minimum, maximum = find_limits(self.filtered_signal.c[0,:,int(self.filtered_signal.c.shape[2]/2):])
+                    ax.set_ylim([minimum, maximum])
+                    ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize)
+                    if l==0:
+                        ax.set_title('$m=1$', fontsize=self.fig_property.fontsize+2)
+            else:
+                for m in range(self.filtered_signal.c.shape[0]):
+                    for l in range(self.filtered_signal.c.shape[1]):
+                        ax = axes[l][m]
+                        ax.plot(self.signal.t, self.filtered_signal.c[m,l,:])
+                        ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
+                        ax.tick_params(labelsize=self.fig_property.fontsize)
+                        minimum, maximum = find_limits(self.filtered_signal.c[m,:,int(self.filtered_signal.c.shape[2]/2):])
+                        ax.set_ylim([minimum, maximum])
+                        ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize)
+                    if l==0:
+                        ax.set_title('$m={}$'.format(m+1), fontsize=self.fig_property.fontsize+2)
         else:
             ax = axes
-            ax.plot(self.signal.t, self.filtered_signal.c[0,:], color='magenta')
-            ax.legend(fontsize=self.fig_property.fontsize-5)
+            ax.plot(self.signal.t, self.filtered_signal.c[0,0,:])
+            ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
             ax.tick_params(labelsize=self.fig_property.fontsize)
-            maximum = np.max(self.filtered_signal.c[0])
-            minimum = np.min(self.filtered_signal.c[0])
-            signal_range = maximum-minimum
-            ax.set_ylim([minimum-signal_range/10, maximum+signal_range/10])
+            minimum, maximum = find_limits(self.filtered_signal.c[0,0,int(self.filtered_signal.c.shape[2]/2):])
+            ax.set_ylim([minimum, maximum])
+            ax.set_ylabel('$c$', fontsize=self.fig_property.fontsize)
         return axes
 
 class Model(object):

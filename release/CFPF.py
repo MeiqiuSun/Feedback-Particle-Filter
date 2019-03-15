@@ -7,7 +7,7 @@ Created on Wed Feb. 13, 2019
 from Tool import Struct, isiterable, find_limits
 from FPF import FPF
 from Signal import Signal, Sinusoidals
-from single_frequency import Model, Galerkin
+from single_frequency import Model2, Galerkin1
 
 import numpy as np
 import matplotlib
@@ -63,9 +63,11 @@ class CFPF(object):
     def run(self, y):
         """Run CFPF with time series observations(y)"""
         h_hat = np.zeros([self.Nc+1, y.shape[0], y.shape[1]])
+        h = []
         X = []
 
         for j in range(self.Nc):
+            h.append(np.zeros([self.fpf[j].particles.Np, self.fpf[j].M, y.shape[1]]))
             X.append(np.zeros([self.fpf[j].particles.Np, self.fpf[j].N, y.shape[1]]))
 
         for k in range(y.shape[1]):
@@ -75,9 +77,10 @@ class CFPF(object):
             h_hat[0,:,k] = self.h_hat
             for j in range(self.Nc):
                 h_hat[j+1,:,k] = self.fpf[j].h_hat
+                h[j][:,:,k] = self.fpf[j].particles.h
                 X[j][:,:,k] = self.fpf[j].particles.X
                 
-        return Struct(h_hat=h_hat, X=X)
+        return Struct(h_hat=h_hat, h=h, X=X)
 
 class Figure(object):
     """Figure: Figures for Coupled Feedback Partilce Filter
@@ -178,7 +181,10 @@ class Figure(object):
         axes[1].set_ylabel('$L_2$ error', fontsize=self.fig_property.fontsize)
 
         for j in range(self.filtered_signal.h_hat.shape[0]-1):
-            axes[2].plot(self.signal.t, self.filtered_signal.h_hat[j+1,m,:], color='C{}'.format(j+1), label='$_{}\hat h$'.format(j+1))
+            for i in range(self.filtered_signal.h[j].shape[0]):
+                axes[2].scatter(self.signal.t, self.filtered_signal.h[j][i,m,:], color='C{}'.format(j+1), alpha=0.01)
+        for j in range(self.filtered_signal.h_hat.shape[0]-1):
+            axes[2].plot(self.signal.t, self.filtered_signal.h_hat[j+1,m,:], color='C{}'.format(j+1), label=r'$_{}\hat h$'.format(j+1))
         axes[2].tick_params(labelsize=self.fig_property.fontsize)
         minimum, maximum = find_limits(self.filtered_signal.h_hat[1:,m])
         axes[2].set_ylim([minimum, maximum])
@@ -202,7 +208,7 @@ class Figure(object):
                 if n==1:
                     ax.set_ylim([-0.2*np.pi, 2.2*np.pi])
                     ax.set_yticks(np.linspace(0,2*np.pi,5))
-                    ax.set_yticklabels(['$0$','$\pi/2$','$\pi$','$3\pi/2$','$2\pi$'])
+                    ax.set_yticklabels([r'$0$',r'$\pi/2$',r'$\pi$',r'$3\pi/2$',r'$2\pi$'])
                     if j==0:
                         ax.set_ylabel(r'$\theta$ [rad]', fontsize=self.fig_property.fontsize)
                     state_of_signal = np.mod(self.signal.X[n_signal,:], 2*np.pi)
@@ -244,7 +250,7 @@ class Figure(object):
                 if n==1:
                     ax.set_ylim([-0.2*np.pi, 2.2*np.pi])
                     ax.set_yticks(np.linspace(0,2*np.pi,5))
-                    ax.set_yticklabels(['$0$','$\pi/2$','$\pi$','$3\pi/2$','$2\pi$'])
+                    ax.set_yticklabels([r'$0$',r'$\pi/2$',r'$\pi$',r'$3\pi/2$',r'$2\pi$'])
                     if j==0:
                         ax.set_ylabel(r'$\theta$ [rad]', fontsize=self.fig_property.fontsize)
                     state_of_signal = np.mod(self.signal.X[n_signal,:], 2*np.pi)
@@ -283,8 +289,8 @@ if __name__ == "__main__":
     min_sigma_B = 0.01
     min_sigma_W = 0.5
     for j in range(number_of_channels):
-        models.append(Model(amp_range=amp_range[j], freq_range=freq_range[j], min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W))
-        galerkins.append(Galerkin())
+        models.append(Model2(amp_range=amp_range[j], freq_range=freq_range[j], min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W))
+        galerkins.append(Galerkin1())
         sigma_B.append(signal_type.sigma_B[2*j:2*j+2])
     
     coupled_feedback_particle_filter = CFPF(number_of_channels=number_of_channels, numbers_of_particles=Np, models=models, galerkins=galerkins, sigma_B=sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
