@@ -188,6 +188,7 @@ class FPF(object):
                 filtered_signal: Struct(h_hat, X), filtered observations with information of particles
         """
         h_hat = np.zeros(y.shape)
+        L2_error = np.zeros(y.shape)
         h = np.zeros([self.particles.Np, self.M, y.shape[1]])
         X = np.zeros([self.particles.Np, self.N, y.shape[1]])
         c = np.zeros([self.M, self.galerkin.L, y.shape[1]])
@@ -199,8 +200,9 @@ class FPF(object):
             h[:,:,k] = self.particles.h
             X[:,:,k] = self.particles.X
             c[:,:,k] = self.c
-
-        return Struct(h_hat=h_hat, h=h, X=X, c=c)
+        for m in range(y.shape[0]):
+            L2_error[m,:] = np.sqrt(np.cumsum(np.square(y[m]-h_hat[m])*self.dt)/(self.dt*(y.shape[1]-1)))/self.sigma_W[m]
+        return Struct(h_hat=h_hat, L2_error=L2_error, h=h, X=X, c=c)
 
 class Figure(object):
     """Figure: Figures for Feedback Partilce Filter
@@ -214,12 +216,8 @@ class Figure(object):
             filtered_signal: Struct, filtered observations with information of particles
         Methods =
             plot(): plot figures
-            plot_signal(axes): plot a figure with observations and filtered observations together, each of axes represents a time series of observation
-            plot_theta(ax): plot theta for each particles
-            plot_freq(ax): plot frequency for each particles and the average frequency
-            plot_amp(ax): plot amplitude for each particles and the average amplitude
-            plot_sync_matrix(ax, sync_matrix): plot synchronized matrix
-            plot_sync_particles(ax, sync_particles): plot synchronized particles
+            plot_signal(axes, m): plot a figure with observations and filtered observations together, each of axes represents a time series of observation
+            
     """
     def __init__(self, fig_property, signal, filtered_signal):
         self.fig_property = fig_property
@@ -227,125 +225,139 @@ class Figure(object):
         self.filtered_signal = filtered_signal
     
     def plot(self):
+        figs = dict()
+
         if self.fig_property.plot_signal:
-            fig, axes = plt.subplots(self.signal.Y.shape[0], 1, figsize=(9,7))
-            signal_axes = self.plot_signal(axes)
-            fig.add_subplot(111, frameon=False)
-            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-            plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
+            for m in range(self.signal.Y.shape[0]):
+                fig = plt.figure(figsize=(9,9))
+                ax2 = plt.subplot2grid((4,1),(3,0))
+                ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3, sharex=ax2)
+                axes = self.plot_signal([ax1, ax2], m)
+                plt.setp(ax1.get_xticklabels(), visible=False)
+                fig.add_subplot(111, frameon=False)
+                plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+                plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
+                plt.title('m={}'.format(m+1), fontsize=self.fig_property.fontsize+2)
+                figs['signal_{}'.format(m+1)] = Struct(fig=fig, axes=axes)
 
         if self.fig_property.plot_X:
-            fig, axes = plt.subplots(self.filtered_signal.X.shape[1],1, figsize=(9,7), sharex=True)
-            X_axes = self.plot_X(axes)
+            nrow = self.filtered_signal.X.shape[1]
+            fig, axes = plt.subplots(nrow, 1, figsize=(9,4*nrow+1), sharex=True)
+            axes = self.plot_X(axes)
             fig.add_subplot(111, frameon=False)
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
             plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
+            figs['X'] = Struct(fig=fig, axes=axes)
 
         if self.fig_property.plot_histogram:
-            fig, axes = plt.subplots(self.filtered_signal.X.shape[1],1, figsize=(9,7), sharex=True)
-            histogram_axes = self.plot_histogram(axes)
+            nrow = self.filtered_signal.X.shape[1]
+            fig, axes = plt.subplots(nrow ,1, figsize=(9,4*nrow+1), sharex=True)
+            axes = self.plot_histogram(axes)
             fig.add_subplot(111, frameon=False)
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-            plt.xlabel('\npercentage', fontsize=self.fig_property.fontsize)
+            plt.xlabel('\nhistogram [%]', fontsize=self.fig_property.fontsize)
+            figs['histogram'] = Struct(fig=fig, axes=axes)
         
         if self.fig_property.plot_c:
-            fig, axes = plt.subplots(self.filtered_signal.c.shape[1], self.filtered_signal.c.shape[0], figsize=(9,7), sharex=True)
-            c_axes = self.plot_c(axes)
-            fig.add_subplot(111, frameon=False)
-            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-            plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
-
-        if self.fig_property.show:
-            plt.show()
+            for m in range(self.signal.Y.shape[0]):
+                nrow = self.filtered_signal.c.shape[1]
+                fig, axes = plt.subplots(nrow, 1, figsize=(9,4*nrow+1), sharex=True)
+                axes = self.plot_c(axes, m)
+                fig.add_subplot(111, frameon=False)
+                plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+                plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
+                plt.title('m={}'.format(m+1), fontsize=self.fig_property.fontsize+2)
+                figs['c,m={}'.format(m+1)] = Struct(fig=fig, axes=axes)
         
-        return
+        return figs
 
-    def plot_signal(self, axes):
-        if isiterable(axes):
-            for i, ax in enumerate(axes):
-                ax.plot(self.signal.t, self.signal.Y[i], color='cyan', label=r'signal')
-                ax.plot(self.signal.t, self.filtered_signal.h_hat[i,:], color='magenta', label=r'estimation')
-                ax.legend(fontsize=self.fig_property.fontsize-5)
-                ax.tick_params(labelsize=self.fig_property.fontsize)
-                maximum = np.max(self.signal.Y[i])
-                minimum = np.min(self.signal.Y[i])
-                signal_range = maximum-minimum
-                ax.set_ylim([minimum-signal_range/10, maximum+signal_range/10])
-        else:
-            ax = axes
-            ax.plot(self.signal.t, self.signal.Y[0], color='cyan', label=r'signal')
-            ax.plot(self.signal.t, self.filtered_signal.h_hat[0,:], color='magenta', label=r'estimation')
-            ax.legend(fontsize=self.fig_property.fontsize-5)
-            ax.tick_params(labelsize=self.fig_property.fontsize)
-            maximum = np.max(self.signal.Y[0])
-            minimum = np.min(self.signal.Y[0])
-            signal_range = maximum-minimum
-            ax.set_ylim([minimum-signal_range/10, maximum+signal_range/10])
+    def plot_signal(self, axes, m):
+        axes[0].plot(self.signal.t, self.signal.Y[m], color='gray', label=r'signal $Y_t$')
+        axes[0].plot(self.signal.t, self.filtered_signal.h_hat[m], color='magenta', label=r'estimation $\hat h_t$')
+        axes[0].legend(fontsize=self.fig_property.fontsize-5, loc='lower right', ncol=2)
+        axes[0].tick_params(labelsize=self.fig_property.fontsize)
+        axes[0].set_ylim(find_limits(self.signal.Y))
+        
+        axes[1].plot(self.signal.t,self.filtered_signal.L2_error[m], color='magenta')
+        axes[1].tick_params(labelsize=self.fig_property.fontsize)
+        axes[1].set_ylim(find_limits(self.filtered_signal.L2_error[m]))
+        axes[1].set_ylabel('$L_2$ error', fontsize=self.fig_property.fontsize)
         return axes
 
-    def plot_X(self, axes):
-        if isiterable(axes):
-            for i, ax in enumerate(axes):
-                for k in range(self.filtered_signal.X.shape[0]):
-                    state_of_filtered_signal = self.filtered_signal.X[k,i,:]
-                    ax.scatter(self.signal.t, state_of_filtered_signal, s=0.5)
-                ax.tick_params(labelsize=self.fig_property.fontsize)
+    def modified(self, signal, n):
+        if not 'restrictions' in self.fig_property.keys():
+            return signal
         else:
-            ax = axes
-            for k in range(self.filtered_signal.X.shape[0]):
-                ax.scatter(self.signal.t, self.filtered_signal.X[k,0,:], s=0.5)
+            signal = self.fig_property.restrictions.scaling[n]*signal
+            if not np.isnan(self.fig_property.restrictions.mod[n]):
+                signal = np.mod(signal, self.fig_property.restrictions.mod[n])
+        return signal
+
+    def set_limits(self, signal, n=np.nan, center=False):
+        limits = find_limits(signal)
+        if not np.isnan(n):
+            if not np.isnan(self.fig_property.restrictions.mod[n]):
+                limits = find_limits(np.array([0, self.fig_property.restrictions.mod[n]]))
+            if self.fig_property.restrictions.zero[n]:
+                limits = find_limits(np.append(signal,0))
+        if center or (self.fig_property.restrictions.center[n] if not np.isnan(n) else False):
+            maximum = np.max(np.absolute(limits))
+            limits = [-maximum, maximum]
+        return limits
+
+    def plot_X(self, axes):
+        Np = self.filtered_signal.X.shape[0]
+        sampling_number = np.random.choice(Np, size=int(Np*self.fig_property.particles_ratio), replace=False)
+
+        def plot_Xn(self, ax, sampling_number, n=0):
+            state_of_filtered_signal = self.modified(self.filtered_signal.X[:,n,:], n)
+            for i in range(sampling_number.shape[0]):
+                ax.scatter(self.signal.t, state_of_filtered_signal[sampling_number[i]], s=0.5)
             ax.tick_params(labelsize=self.fig_property.fontsize)
+            ax.set_ylim(self.set_limits(state_of_filtered_signal, n=n))
+            return ax
+
+        if isiterable(axes):
+            for n, ax in enumerate(axes):
+                plot_Xn(self, ax, sampling_number, n)
+        else:
+            plot_Xn(self, axes, sampling_number)
         return axes
 
     def plot_histogram(self, axes):
-        n_bins = 100
-        if isiterable(axes):
-            for i, ax in enumerate(axes):
-                state_of_filtered_signal = self.filtered_signal.X[:,i,-1]
-                ax.hist(state_of_filtered_signal, bins=n_bins, orientation='horizontal')
-                ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0]))
-                ax.tick_params(labelsize=self.fig_property.fontsize)
-        else:
-            ax = axes
-            ax.hist(self.filtered_signal.X[:, 0,-1], bins=n_bins, orientation='horizontal')
-            ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0]))
+
+        def plot_histogram_Xn(self, ax, n=0, k=-1):
+            state_of_filtered_signal = self.modified(self.filtered_signal.X[:,n,:], n)
+            ax.hist(state_of_filtered_signal[:,k], bins=self.fig_property.n_bins, color='blue', orientation='horizontal')
+            ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0], symbol=''))
             ax.tick_params(labelsize=self.fig_property.fontsize)
+            ax.set_ylim(self.set_limits(state_of_filtered_signal, n=n))
+            return ax
+
+        if isiterable(axes):
+            for n, ax in enumerate(axes):
+                plot_histogram_Xn(self, ax, n)
+        else:
+            plot_histogram_Xn(self, axes)
 
         return axes
 
-    def plot_c(self, axes):
-        if isiterable(axes):
-            if self.filtered_signal.c.shape[0]==1:
-                for l in range(self.filtered_signal.c.shape[1]):
-                    ax = axes[l]
-                    ax.plot(self.signal.t, self.filtered_signal.c[0,l,:])
-                    ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
-                    ax.tick_params(labelsize=self.fig_property.fontsize)
-                    minimum, maximum = find_limits(self.filtered_signal.c[0,:,int(self.filtered_signal.c.shape[2]/2):])
-                    ax.set_ylim([minimum, maximum])
-                    ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize)
-                    if l==0:
-                        ax.set_title('$m=1$', fontsize=self.fig_property.fontsize+2)
-            else:
-                for m in range(self.filtered_signal.c.shape[0]):
-                    for l in range(self.filtered_signal.c.shape[1]):
-                        ax = axes[l][m]
-                        ax.plot(self.signal.t, self.filtered_signal.c[m,l,:])
-                        ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
-                        ax.tick_params(labelsize=self.fig_property.fontsize)
-                        minimum, maximum = find_limits(self.filtered_signal.c[m,:,int(self.filtered_signal.c.shape[2]/2):])
-                        ax.set_ylim([minimum, maximum])
-                        ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize)
-                    if l==0:
-                        ax.set_title('$m={}$'.format(m+1), fontsize=self.fig_property.fontsize+2)
-        else:
-            ax = axes
-            ax.plot(self.signal.t, self.filtered_signal.c[0,0,:])
-            ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='black')
+    def plot_c(self, axes, m):
+
+        def plot_cl(self, ax, m, l=0):
+            ax.plot(self.signal.t, self.filtered_signal.c[m,l,:], color='magenta')
+            ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='gray', alpha=0.3)
             ax.tick_params(labelsize=self.fig_property.fontsize)
-            minimum, maximum = find_limits(self.filtered_signal.c[0,0,int(self.filtered_signal.c.shape[2]/2):])
-            ax.set_ylim([minimum, maximum])
-            ax.set_ylabel('$c$', fontsize=self.fig_property.fontsize)
+            ax.set_ylim(self.set_limits(self.filtered_signal.c[m,:,int(self.signal.t.shape[0]/2):], center=True))
+            ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize, rotation=0)
+            return ax
+
+        if isiterable(axes):
+            for l, ax in enumerate(axes):
+                plot_cl(self, ax, m, l)
+        else:
+            plot_cl(self, axes, m)
+
         return axes
 
 class Model(object):
@@ -440,9 +452,9 @@ if __name__ == "__main__":
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True, plot_c=True)
+    fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, plot_histogram=True, plot_c=True)
     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
-    figure.plot()
+    figs = figure.plot()
 
     plt.show()
 

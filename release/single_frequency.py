@@ -5,7 +5,7 @@ Created on Mon Mar. 11, 2019
 """
 
 from Tool import Struct, isiterable, find_limits
-from FPF import FPF
+from FPF import FPF, Figure
 from Signal import Signal, Sinusoidal
 
 import numpy as np
@@ -14,7 +14,7 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
 
-class Figure1(object):  # states (theta1, theta2, ...)
+class Figure1(object):          # states (theta1, theta2, ...)
     """Figure: Figures for Feedback Partilce Filter
         Initialize = Figure(fig_property, signal, filtered_signal)
             fig_property: Sturct, properties for figures and plot flags
@@ -187,7 +187,7 @@ class Figure1(object):  # states (theta1, theta2, ...)
             ax.set_ylabel('$c$', fontsize=self.fig_property.fontsize)
         return axes
 
-class Figure2(object):  # even states (r1, theta1, r2, theta2, ...)
+class Figure2(object):          # states (r1, theta1, r2, theta2, ...)
     """Figure: Figures for Feedback Partilce Filter
         Initialize = Figure(fig_property, signal, filtered_signal)
             fig_property: Sturct, properties for figures and plot flags
@@ -380,9 +380,10 @@ class Figure2(object):  # even states (r1, theta1, r2, theta2, ...)
             ax.set_ylabel('$c$', fontsize=self.fig_property.fontsize)
         return axes
 
-class Model1(object):   # 1 state (theta)
+class Model1(object):           # 1 state (theta)
     def __init__(self, amp, freq_range, min_sigma_B=0.01, min_sigma_W=0.1):
-        self.N = 1
+        self.states = [r'$\theta$']
+        self.N = len(self.states)
         self.M = 1
         self.r = amp
         self.X0_range = [[0,2*np.pi]]
@@ -410,9 +411,42 @@ class Model1(object):   # 1 state (theta)
     def h(self, X):
         return self.r*np.cos(X[:,0])
 
-class Model2(object):   # 2 states (r, theta)
+class Model2omega(object):      # 2 states (theta, omega)
+    def __init__(self, amp, freq_range, min_sigma_B=0.01, min_sigma_W=0.1):
+        self.states = [r'$\theta$',r'$\omega$']
+        self.N = len(self.states)
+        self.M = 1
+        self.r = amp
+        self.X0_range = [[0,2*np.pi], [freq*2*np.pi for freq in freq_range]]
+        self.min_sigma_B = min_sigma_B
+        self.min_sigma_W = min_sigma_W
+
+    def modified_sigma_B(self, sigma_B):
+        new_sigma_B = np.zeros(self.N)
+        new_sigma_B[0] = sigma_B[1]
+        new_sigma_B = new_sigma_B.clip(min=self.min_sigma_B)
+        return new_sigma_B
+    
+    def modified_sigma_W(self, sigma_W):
+        new_sigma_W = sigma_W.clip(min=self.min_sigma_W)
+        return new_sigma_W
+
+    def states_constraints(self, X):
+        # X[:,0] = np.mod(X[:,0], 2*np.pi)
+        return X
+
+    def f(self, X):
+        dXdt = np.zeros(X.shape)
+        dXdt[:,0] = X[:,1]
+        return dXdt
+
+    def h(self, X):
+        return self.r*np.cos(X[:,0]) 
+
+class Model2(object):           # 2 states (r, theta)
     def __init__(self, amp_range, freq_range, min_sigma_B=0.01, min_sigma_W=0.1):
-        self.N = 2
+        self.states = [r'$r$',r'$\theta$']
+        self.N = len(self.states)
         self.M = 1
         self.X0_range = [amp_range, [0,2*np.pi]]
         self.freq_range = freq_range
@@ -440,7 +474,39 @@ class Model2(object):   # 2 states (r, theta)
     def h(self, X):
         return X[:,0]*np.cos(X[:,1]) 
 
-class Galerkin(object):    # 1 states (theta) 2 base functions [cos(theta), sin(theta)]
+class Model3(object):           # 2 states (r, theta, omega)
+    def __init__(self, amp_range, freq_range, min_sigma_B=0.01, min_sigma_W=0.1):
+        self.states = [r'$r$',r'$\theta$',r'$\omega$']
+        self.N = len(self.states)
+        self.M = 1
+        self.X0_range = [amp_range, [0,2*np.pi], [freq*2*np.pi for freq in freq_range]]
+        self.min_sigma_B = min_sigma_B
+        self.min_sigma_W = min_sigma_W
+
+    def modified_sigma_B(self, sigma_B):
+        new_sigma_B = np.zeros(self.N)
+        for n in range(sigma_B.shape[0]):
+            new_sigma_B[n] = sigma_B[n]
+        new_sigma_B = new_sigma_B.clip(min=self.min_sigma_B)
+        return new_sigma_B
+    
+    def modified_sigma_W(self, sigma_W):
+        new_sigma_W = sigma_W.clip(min=self.min_sigma_W)
+        return new_sigma_W
+
+    def states_constraints(self, X):
+        # X[:,1] = np.mod(X[:,1], 2*np.pi)
+        return X
+
+    def f(self, X):
+        dXdt = np.zeros(X.shape)
+        dXdt[:,1] = X[:,2]
+        return dXdt
+
+    def h(self, X):
+        return X[:,0]*np.cos(X[:,1]) 
+
+class Galerkin(object):         # 1 state (theta) 2 base functions [cos(theta), sin(theta)]
     # Galerkin approximation in finite element method
     def __init__(self):
         # L: int, number of trial (base) functions
@@ -462,7 +528,34 @@ class Galerkin(object):    # 1 states (theta) 2 base functions [cos(theta), sin(
                                      [[ -np.sin(X[:,0])]]]
         return np.array(grad_grad_trial_functions)
 
-class Galerkin0(object):    # 2 states (r, theta) 2 base functions [r*cos(theta), r*sin(theta)]
+class GalerkinOmega(object):    # 2 states (theta, omega) 3 base functions [cos(theta), sin(theta), omega]
+    # Galerkin approximation in finite element method
+    def __init__(self):
+        # L: int, number of trial (base) functions
+        self.L = 3       # trial (base) functions
+        
+    def psi(self, X):
+        trial_functions = [ np.cos(X[:,0]), np.sin(X[:,0]), X[:,1]]
+        return np.array(trial_functions)
+        
+    # gradient of trial (base) functions
+    def grad_psi(self, X):
+        grad_trial_functions = [[           -np.sin(X[:,0]), np.zeros(X[:,1].shape[0])],\
+                                [            np.cos(X[:,0]), np.zeros(X[:,1].shape[0])],\
+                                [ np.zeros(X[:,0].shape[0]),  np.ones(X[:,1].shape[0])]]
+        return np.array(grad_trial_functions)
+
+    # gradient of gradient of trail (base) functions
+    def grad_grad_psi(self, X):
+        grad_grad_trial_functions = [[[           -np.cos(X[:,0]), np.zeros(X[:,1].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])]],\
+                                     [[           -np.sin(X[:,0]), np.zeros(X[:,1].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])]],\
+                                     [[ np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]), np.zeros(X[:,1].shape[0])]]]
+        return np.array(grad_grad_trial_functions)
+
+class Galerkin0(object):        # 2 states (r, theta) 2 base functions [r*cos(theta), r*sin(theta)]
     # Galerkin approximation in finite element method
     def __init__(self):
         # L: int, number of trial (base) functions
@@ -486,7 +579,7 @@ class Galerkin0(object):    # 2 states (r, theta) 2 base functions [r*cos(theta)
                                       [            np.cos(X[:,1]), -np.power(X[:,0],1)*np.sin(X[:,1])]]]
         return np.array(grad_grad_trial_functions)
 
-class Galerkin1(object):    # 2 states (r, theta) 3 base functions [r, r*cos(theta), r*sin(theta)]
+class Galerkin1(object):        # 2 states (r, theta) 3 base functions [r, r*cos(theta), r*sin(theta)]
     # Galerkin approximation in finite element method
     def __init__(self):
         # L: int, number of trial (base) functions
@@ -513,7 +606,7 @@ class Galerkin1(object):    # 2 states (r, theta) 3 base functions [r, r*cos(the
                                       [            np.cos(X[:,1]),  -np.power(X[:,0],1)*np.sin(X[:,1])]]]
         return np.array(grad_grad_trial_functions)
 
-class Galerkin2(object):    # 2 states (r, theta) 3 base functions [r^2/2, r*cos(theta), r*sin(theta)]
+class Galerkin2(object):        # 2 states (r, theta) 3 base functions [r^2/2, r*cos(theta), r*sin(theta)]
     # Galerkin approximation in finite element method
     def __init__(self):
         # L: int, number of trial (base) functions
@@ -540,7 +633,7 @@ class Galerkin2(object):    # 2 states (r, theta) 3 base functions [r^2/2, r*cos
                                       [            np.cos(X[:,1]),  -np.power(X[:,0],1)*np.sin(X[:,1])]]]
         return np.array(grad_grad_trial_functions)
 
-class Galerkin3(object):    # 2 states (r, theta) 3 base functions [r^3/6, r*cos(theta), r*sin(theta)]
+class Galerkin3(object):        # 2 states (r, theta) 3 base functions [r^3/6, r*cos(theta), r*sin(theta)]
     # Galerkin approximation in finite element method
     def __init__(self):
         # L: int, number of trial (base) functions
@@ -567,9 +660,21 @@ class Galerkin3(object):    # 2 states (r, theta) 3 base functions [r^3/6, r*cos
                                       [            np.cos(X[:,1]),  -np.power(X[:,0],1)*np.sin(X[:,1])]]]
         return np.array(grad_grad_trial_functions)
 
+def restrictions(states):
+    mod = []
+    scaling = []
+    center = []
+    zero = []
+    for state in states:
+        mod.append(2*np.pi if 'theta' in state else np.nan)
+        scaling.append(1/(2*np.pi) if 'omega' in state else 1)
+        center.append('r' in state)
+        zero.append('omega' in state)
+    return Struct(mod=mod, scaling=scaling, center=center, zero=zero)
+
 if __name__ == "__main__":
 
-    T = 40
+    T = 5
     sampling_rate = 160 # Hz
     dt = 1./sampling_rate
     signal_type = Sinusoidal(dt)
@@ -577,16 +682,29 @@ if __name__ == "__main__":
     
     Np = 1000
     freq_range = [1.1,1.3]
+    amp = signal_type.amp[0]
+    # model = Model1(amp=amp, freq_range=freq_range)
+    model = Model2omega(amp=amp, freq_range=freq_range)
     # amp_range = [0.5,1.5]
     # model = Model2(amp_range=amp_range, freq_range=freq_range)
-    amp = signal_type.amp[0]
-    model = Model1(amp=amp, freq_range=freq_range)
-    feedback_particle_filter = FPF(number_of_particles=Np, model=model, galerkin=Galerkin(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
+    # model = Model3(amp_range=amp_range, freq_range=freq_range)
+    feedback_particle_filter = FPF(number_of_particles=Np, model=model, galerkin=GalerkinOmega(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, plot_histogram=True, plot_c=True)
-    figure = Figure1(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
-    figure.plot()
-
+    fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, particles_ratio=0.01, restrictions=restrictions(model.states), \
+                          plot_histogram=True, n_bins = 100, plot_c=True)
+    figs = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal).plot()
+    for n, state in enumerate(model.states):
+        if 'X' in figs.keys():
+            figs['X'].axes[n].set_ylabel(state, fontsize=fontsize, rotation=0)
+        if 'histogram' in figs.keys():
+            figs['histogram'].axes[n].set_ylabel(state, fontsize=fontsize, rotation=0)
+        if 'theta' in state:
+            if 'X' in figs.keys():
+                figs['X'].axes[n].set_yticks(np.linspace(0,2*np.pi,5))
+                figs['X'].axes[n].set_yticklabels([r'$0$',r'$\pi/2$',r'$\pi$',r'$3\pi/2$',r'$2\pi$'])
+            if 'histogram' in figs.keys():
+                figs['histogram'].axes[n].set_yticks(np.linspace(0,2*np.pi,5))
+                figs['histogram'].axes[n].set_yticklabels([r'$0$',r'$\pi/2$',r'$\pi$',r'$3\pi/2$',r'$2\pi$'])
     plt.show()

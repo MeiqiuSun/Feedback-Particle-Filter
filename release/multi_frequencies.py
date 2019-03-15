@@ -278,7 +278,6 @@ if __name__ == "__main__":
     figure = Figure1(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
     figure.plot()
     
-    plot_innovationa4(signal, filtered_signal, dt)
-
+    # plot_innovationa4(signal, filtered_signal, dt)
     
     plt.show()
