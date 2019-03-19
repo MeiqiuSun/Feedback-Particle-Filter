@@ -223,13 +223,13 @@ class Figure(object):
         self.fig_property = fig_property
         self.signal = signal
         self.filtered_signal = filtered_signal
+        self.figs = {'fontsize':self.fig_property.fontsize}
     
     def plot(self):
-        figs = dict()
 
         if self.fig_property.plot_signal:
             for m in range(self.signal.Y.shape[0]):
-                fig = plt.figure(figsize=(9,9))
+                fig = plt.figure(figsize=(8,8))
                 ax2 = plt.subplot2grid((4,1),(3,0))
                 ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3, sharex=ax2)
                 axes = self.plot_signal([ax1, ax2], m)
@@ -238,38 +238,41 @@ class Figure(object):
                 plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
                 plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
                 plt.title('m={}'.format(m+1), fontsize=self.fig_property.fontsize+2)
-                figs['signal_{}'.format(m+1)] = Struct(fig=fig, axes=axes)
+                self.figs['signal_{}'.format(m+1)] = Struct(fig=fig, axes=axes)
 
         if self.fig_property.plot_X:
             nrow = self.filtered_signal.X.shape[1]
-            fig, axes = plt.subplots(nrow, 1, figsize=(9,4*nrow+1), sharex=True)
+            fig, axes = plt.subplots(nrow, 1, figsize=(8,4*nrow+4), sharex=True)
+            axes = [axes] if nrow==1 else axes
             axes = self.plot_X(axes)
             fig.add_subplot(111, frameon=False)
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
             plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
-            figs['X'] = Struct(fig=fig, axes=axes)
+            self.figs['X'] = Struct(fig=fig, axes=axes)
 
         if self.fig_property.plot_histogram:
             nrow = self.filtered_signal.X.shape[1]
-            fig, axes = plt.subplots(nrow ,1, figsize=(9,4*nrow+1), sharex=True)
+            fig, axes = plt.subplots(nrow ,1, figsize=(8,4*nrow+4), sharex=True)
+            axes = [axes] if nrow==1 else axes
             axes = self.plot_histogram(axes)
             fig.add_subplot(111, frameon=False)
             plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
             plt.xlabel('\nhistogram [%]', fontsize=self.fig_property.fontsize)
-            figs['histogram'] = Struct(fig=fig, axes=axes)
+            self.figs['histogram'] = Struct(fig=fig, axes=axes)
         
         if self.fig_property.plot_c:
             for m in range(self.signal.Y.shape[0]):
                 nrow = self.filtered_signal.c.shape[1]
-                fig, axes = plt.subplots(nrow, 1, figsize=(9,4*nrow+1), sharex=True)
+                fig, axes = plt.subplots(nrow, 1, figsize=(8,4*nrow+4), sharex=True)
+                axes = [axes] if nrow==1 else axes
                 axes = self.plot_c(axes, m)
                 fig.add_subplot(111, frameon=False)
                 plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
                 plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
                 plt.title('m={}'.format(m+1), fontsize=self.fig_property.fontsize+2)
-                figs['c,m={}'.format(m+1)] = Struct(fig=fig, axes=axes)
+                self.figs['c,m={}'.format(m+1)] = Struct(fig=fig, axes=axes)
         
-        return figs
+        return self.figs
 
     def plot_signal(self, axes, m):
         axes[0].plot(self.signal.t, self.signal.Y[m], color='gray', label=r'signal $Y_t$')
@@ -317,11 +320,8 @@ class Figure(object):
             ax.set_ylim(self.set_limits(state_of_filtered_signal, n=n))
             return ax
 
-        if isiterable(axes):
-            for n, ax in enumerate(axes):
-                plot_Xn(self, ax, sampling_number, n)
-        else:
-            plot_Xn(self, axes, sampling_number)
+        for n, ax in enumerate(axes):
+            plot_Xn(self, ax, sampling_number, n)
         return axes
 
     def plot_histogram(self, axes):
@@ -334,12 +334,8 @@ class Figure(object):
             ax.set_ylim(self.set_limits(state_of_filtered_signal, n=n))
             return ax
 
-        if isiterable(axes):
-            for n, ax in enumerate(axes):
-                plot_histogram_Xn(self, ax, n)
-        else:
-            plot_histogram_Xn(self, axes)
-
+        for n, ax in enumerate(axes):
+            plot_histogram_Xn(self, ax, n)
         return axes
 
     def plot_c(self, axes, m):
@@ -352,11 +348,8 @@ class Figure(object):
             ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize, rotation=0)
             return ax
 
-        if isiterable(axes):
-            for l, ax in enumerate(axes):
-                plot_cl(self, ax, m, l)
-        else:
-            plot_cl(self, axes, m)
+        for l, ax in enumerate(axes):
+            plot_cl(self, ax, m, l)
 
         return axes
 
