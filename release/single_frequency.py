@@ -108,7 +108,7 @@ class Model2(object):           # 2 states (r, theta)
     def h(self, X):
         return X[:,0]*np.cos(X[:,1]) 
 
-class Model3(object):           # 2 states (r, theta, omega)
+class Model3(object):           # 3 states (r, theta, omega)
     def __init__(self, amp_range, freq_range, min_sigma_B=0.01, min_sigma_W=0.1):
         self.states = [r'$r$',r'$\theta$',r'$\omega$']
         self.N = len(self.states)
@@ -294,6 +294,45 @@ class Galerkin3(object):        # 2 states (r, theta) 3 base functions [r^3/6, r
                                       [            np.cos(X[:,1]),  -np.power(X[:,0],1)*np.sin(X[:,1])]]]
         return np.array(grad_grad_trial_functions)
 
+class Galerkin34(object):       # 3 states (r, theta, omega) 4 base functions [r, r*cos(theta), r*sin(theta), omega^2/2]
+    # Galerkin approximation in finite element method
+    def __init__(self, power=1):
+        # L: int, number of trial (base) functions
+        self.L = 4       # trial (base) functions
+        self.power = power
+        self.factorial = 1
+        for p in range(self.power):
+            self.factorial = self.factorial*(p+1)
+        
+        
+    def psi(self, X):
+        trial_functions = [ X[:,0], np.power(X[:,0],1)*np.cos(X[:,1]), np.power(X[:,0],1)*np.sin(X[:,1]), np.power(X[:,2],self.power)/self.factorial]
+        return np.array(trial_functions)
+        
+    # gradient of trial (base) functions
+    def grad_psi(self, X):
+        grad_trial_functions = [[  np.ones(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]),                               np.zeros(X[:,2].shape[0])],\
+                                [            np.cos(X[:,1]), -np.power(X[:,0],1)*np.sin(X[:,1]),                               np.zeros(X[:,2].shape[0])],\
+                                [            np.sin(X[:,1]),  np.power(X[:,0],1)*np.cos(X[:,1]),                               np.zeros(X[:,2].shape[0])],\
+                                [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]), np.power(X[:,2],self.power-1)*self.power/self.factorial]]
+        return np.array(grad_trial_functions)
+
+    # gradient of gradient of trail (base) functions
+    def grad_grad_psi(self, X):
+        grad_grad_trial_functions = [[[ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),                     -np.sin(X[:,1]), np.zeros(X[:,2].shape[0])],\
+                                      [           -np.sin(X[:,1]),  -np.power(X[:,0],1)*np.cos(X[:,1]), np.zeros(X[:,2].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),                      np.cos(X[:,1]), np.zeros(X[:,2].shape[0])],\
+                                      [            np.cos(X[:,1]),  -np.power(X[:,0],1)*np.sin(X[:,1]), np.zeros(X[:,2].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0])]],\
+                                     [[ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]), np.zeros(X[:,2].shape[0])],\
+                                      [ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]),  np.power(X[:,2],self.power-2)*(self.power-1)*self.power/self.factorial if not self.power==1 else np.zeros(X[:,2].shape[0])]]]
+        return np.array(grad_grad_trial_functions)
+
 def restrictions(states):
     mod = []
     scaling = []
@@ -332,15 +371,16 @@ if __name__ == "__main__":
     signal = Signal(signal_type=signal_type, T=T)
     
     Np = 1000
-    freq_range = [1.1,1.3]
-    # amp = signal_type.amp[0]
+    # freq_range = [1.1,1.3]
+    freq_range = [0.1,1.5]
+    amp = signal_type.amp[0]
     # model = Model1(amp=amp, freq_range=freq_range)
     # model = Model2omega(amp=amp, freq_range=freq_range)
     amp_range = [0.5,1.5]
-    model = Model2(amp_range=amp_range, freq_range=freq_range)
-    # model = Model3(amp_range=amp_range, freq_range=freq_range)
+    # model = Model2(amp_range=amp_range, freq_range=freq_range)
+    model = Model3(amp_range=amp_range, freq_range=freq_range)
     # galerkin = Galerkin()
-    galerkin = Galerkin1()
+    galerkin = Galerkin34()
     # galerkin = GalerkinOmega()
     feedback_particle_filter = FPF(number_of_particles=Np, model=model, galerkin=galerkin, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)

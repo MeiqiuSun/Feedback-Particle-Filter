@@ -277,8 +277,11 @@ def fpf():
 
 def cfpf():
     from CFPF import CFPF, Figure
-    from single_frequency import Model1, Model2, Galerkin, Galerkin1
-
+    from single_frequency import Model1, Galerkin
+    from single_frequency import Model2omega, GalerkinOmega
+    from single_frequency import Model2, Galerkin1
+    from single_frequency import Model3, Galerkin34
+    
     def restrictions(states):
         mod = []
         scaling = []
@@ -321,9 +324,12 @@ def cfpf():
     sigma_B = []
     for j in range(number_of_channels):
         # model = Model1(amp=amp[j], freq_range=freq_range[j], min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W)
-        model = Model2(amp_range=amp_range[j], freq_range=freq_range[j], min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W)
+        # model = Model2omega(amp=amp[j], freq_range=freq_range[j], min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W)
+        # model = Model2(amp_range=amp_range[j], freq_range=freq_range[j], min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W)
+        model = Model3(amp_range=amp_range[j], freq_range=freq_range[j], min_sigma_B=min_sigma_B, min_sigma_W=min_sigma_W)
         models.append(model)
-        galerkins.append(Galerkin1())
+        galerkin = Galerkin34()
+        galerkins.append(galerkin)
         sigma_B.append(signal_type.sigma_B[2*j:2*j+2])
     
     coupled_feedback_particle_filter = CFPF(number_of_channels=number_of_channels, numbers_of_particles=Np, models=models, galerkins=galerkins, sigma_B=sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
