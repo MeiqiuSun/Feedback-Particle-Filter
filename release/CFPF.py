@@ -83,7 +83,7 @@ class CFPF(object):
         
         for m in range(y.shape[0]):
             L2_error[m,:] = np.sqrt(np.cumsum(np.square(y[m,:]-h_hat[0,m,:])*self.dt)/(self.dt*(y.shape[1]-1)))/self.sigma_W[m]
-        
+
         return Struct(h_hat=h_hat, L2_error=L2_error, h=h, X=X)
 
 class Figure(object):
@@ -108,7 +108,7 @@ class Figure(object):
         self.figs = {'fontsize':self.fig_property.fontsize}
     
     def plot(self):
-
+        print("plot_signal")
         if self.fig_property.plot_signal:
             for m in range(self.signal.Y.shape[0]):
                 fig = plt.figure(figsize=(8,8))
@@ -124,6 +124,7 @@ class Figure(object):
                 plt.title('m={}'.format(m+1), fontsize=self.fig_property.fontsize+2)
                 self.figs['signal_{}'.format(m+1)] = Struct(fig=fig, axes=axes)
 
+        print("plot_X")
         if self.fig_property.plot_X:
             ncol = len(self.filtered_signal.X)
             maxrow = np.max(np.array([self.filtered_signal.X[j].shape[1] for j in range(ncol)]))
@@ -147,6 +148,7 @@ class Figure(object):
             plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
             self.figs['X'] = Struct(fig=fig, axes=axes)
 
+        print("plot_histogram")
         if self.fig_property.plot_histogram:
             ncol = len(self.filtered_signal.X)
             maxrow = np.max(np.array([self.filtered_signal.X[j].shape[1] for j in range(ncol)]))
@@ -191,7 +193,7 @@ class Figure(object):
             axes[2].plot(self.signal.t, self.filtered_signal.h_hat[j+1,m,:], color='C{}'.format(j), label=r'$\hat h_{}$'.format(j+1))
         axes[2].tick_params(labelsize=self.fig_property.fontsize)
         axes[2].set_ylim(find_limits(self.filtered_signal.h_hat[1:,m]))
-        axes[2].legend(fontsize=self.fig_property.fontsize-5)
+        axes[2].legend(fontsize=self.fig_property.fontsize-5, loc='center right')
         return axes
 
     def modified(self, signal, j, n):
