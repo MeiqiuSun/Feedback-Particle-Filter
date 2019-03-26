@@ -4,6 +4,7 @@ Created on Thu Jan. 31, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
+from __future__ import division
 import sys
 from Tool import Struct
 from Signal import Signal, Sinusoidals
