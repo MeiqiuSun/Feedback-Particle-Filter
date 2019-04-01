@@ -10,71 +10,158 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 class Signal(object):
-    """
-    Signal:
+    """Signal:
         Notation Notes:
-            N: number of states(X)
+            Nd: dimension of states(X)
             M: number of observations(Y)
-        Initialize = Signal(freq, amp, sigma_B, sigma_W, dt, T)
-            freq: 1D list with length N, list of freqencies in Hz
-            amp: 2D list with shape of M-by-N, amplitude parameters for h function in Y=h(X)
-            sigma_B: 1D list with legnth N, standard deviation of noise of states(X)
+        Initialize = Signal(f, h, sigma_B, sigma_W, X0, dt, T)
+            f(X, t): state tansition function maps states(X) to states(X_dot)
+            h(X): observation function maps states(X) to observations(Y)
+            sigma_B: 1D list with legnth Nd, standard deviation of noise of states(X)
             sigma_W: 1D list with legnth M, standard deviation of noise of observations(Y)
+            X0: 1D list with length Nd, initial condition of states(X)
             dt: float, size of time step in sec
             T: float or int, end time in sec
         Members =
-            omega: numpy array with shape of (N,), list of freqencies in rad/s
-            amp: numpy array with the shape of (M,N), amplitude parameters for h function in Y=h(X)
-            sigma_B: numpy array with the shape of (N,1), standard deviation of noise of states(X)
-            sigma_W: numpy array with the shape of (M,1), standard deviation of noise of observations(Y)
             dt: float, size of time step in sec
             T: float, end time in sec, which is also an integer mutiple of dt
             t: numpy array with the shape of (T/dt+1,), i.e. 0, dt, 2dt, ... , T-dt, T
-            X: numpy array with the shape of (N,T/dt+1), states in time series
-            dX: numpy array with the shape of (N,T/dt+1), states increment in time series
+            f(X, t): state tansition function maps states(X) to states(X_dot)
+            h(X): observation function maps states(X) to observations(Y)
+            sigma_B: numpy array with the shape of (Nd,1), standard deviation of noise of states(X)
+            sigma_W: numpy array with the shape of (M,1), standard deviation of noise of observations(Y)
+            X: numpy array with the shape of (Nd,T/dt+1), states in time series
+            dX: numpy array with the shape of (Nd,T/dt+1), increment of states in time series
             Y: numpy array with the shape of (M,T/dt+1), observations in time series
-        Methods =
-            h(amp, x): observation function maps states(X) to observations(Y)
+            dZ: numpy array with the shape of (M,T/dt+1), increment of integral of observations in time series
     """
-
-    def __init__(self, freq, amp, sigma_B, sigma_W, dt, T):
-        self.omega = 2*np.pi*(np.array(freq))
-        self.amp = np.array(amp)
-        self.sigma_B = np.reshape(np.array(sigma_B), [self.amp.shape[1],-1])
-        self.sigma_W = np.reshape(np.array(sigma_W), [self.amp.shape[0],-1])
-        self.dt = dt
+    def __init__(self, signal_type, T):
+        self.dt = signal_type.dt
         self.T = self.dt*int(T/self.dt)
-        self.t = np.arange(0,self.T+self.dt,self.dt)
-        self.X = np.zeros([self.sigma_B.shape[0], self.t.shape[0]])
-        self.dX = np.zeros(self.X.shape)
-        for n in range(self.X.shape[0]):
-            """dX = omega*dt + sigma_B*dB"""
-            self.dX[n,:] = self.omega[n]*self.dt + self.sigma_B[n]*self.dt*np.random.normal(0,1,self.t.shape[0])
-            self.X[n,:] = np.cumsum(self.dX[n,:])
-        self.Y = self.h(self.amp, self.X) + self.sigma_W*np.random.normal(0,1,[self.sigma_W.shape[0],self.t.shape[0]])
+        self.t = np.arange(0, self.T+self.dt, self.dt)
 
-    def h(self, amp, x):
-        """observation function maps states(x) to observations(y)"""
-        return np.matmul(amp, np.sin(x))
+        self.f = signal_type.f
+        self.h = signal_type.h
+        
+        self.sigma_B = np.array(signal_type.sigma_B)
+        self.sigma_W = np.array(signal_type.sigma_W)
+
+        self.dX = np.zeros([self.sigma_B.shape[0], self.t.shape[0]])
+        self.X = np.zeros(self.dX.shape)
+        self.dZ = np.zeros([self.sigma_W.shape[0], self.t.shape[0]])
+        self.Y = np.zeros(self.dZ.shape)
+        for k in range(self.t.shape[0]):
+            # dX = f(X, t)*dt + sigma_B*dB
+            if k==0:
+                self.dX[:,k] = np.array(signal_type.X0)
+                self.X[:,k] = np.array(signal_type.X0)
+            else:
+                self.dX[:,k] = self.f(self.X[:,k-1], self.t[k-1])*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt), size=self.sigma_B.shape[0])
+                self.X[:,k] = self.X[:,k-1] + self.dX[:,k]
+            # dZ = h(X)*dt + sigma_W*dW
+            self.dZ[:,k] = self.h(self.X[:,k])*self.dt + self.sigma_W*np.random.normal(0, np.sqrt(self.dt))
+            # Y = dZ/dt = h(X) + white noise with std sigma_W
+            self.Y[:,k] = self.dZ[:,k] / self.dt
+
+class Linear(object):
+    def __init__(self, dt):
+        # N states of state noises
+        self.sigma_B = [0.1, 0.1]
+        # M states of observation noises
+        self.sigma_W = [0.001, 0.001]
+        # initial state condition
+        self.X0 = [1, 0]
+        # sampling time
+        self.dt = dt
+
+    # f(X, t): state tansition function maps states(X) to states(X_dot)
+    def f(self, X, t):
+        A = np.array([[ 0,  1],\
+                      [-1, -1]])
+        return np.matmul(A,X)
+
+    # h(X): observation function maps states(X) to observations(Y)
+    def h(self, X):
+        H = np.array([[1,0],\
+                      [0,1]])
+        return np.matmul(H,X)
+
+class Sinusoidal(object):
+    def __init__(self, dt):
+        # SNR: Signal to Noise ratio
+        self.SNR = [45]
+
+        # amplitude
+        self.amp = [1]
+        # frequency
+        self.freq = [1.2]
+        # initial state condition [A0, theta0]
+        self.X0 = [self.amp[0], 0]
+        # sampling time
+        self.dt = dt
+        # N states of state noises
+        self.sigma_B = [0, 0.1]
+        # M states of observation noises
+        self.sigma_W = np.sqrt(np.sum(np.square(self.amp))/np.power(10, np.array(self.SNR)/10)).tolist()
+    
+    # f(X, t): state tansition function maps states(X) to states(X_dot)
+    def f(self, X, t):
+        X_dot = np.zeros(len(self.sigma_B))
+        X_dot[0] = 0
+        X_dot[1] = 2*np.pi*self.freq[0]
+        return X_dot
+    
+    # h(X): observation function maps states(X) to observations(Y)
+    def h(self, X):
+        Y = np.zeros(len(self.sigma_W))
+        Y[0] = X[0]*np.sin(X[1])
+        return Y
+
+class Sinusoidals(object):
+    def __init__(self, dt):
+        # SNR: Signal to Noise ratio
+        self.SNR = [45]
+        
+        # amplitude
+        self.amp = [1, 3]
+        # frequency
+        self.freq = [1.2, 3.8]
+        # initial state condition [A0, theta0, A1, theta1]
+        self.X0 = [self.amp[0], 0, self.amp[1], 0]
+        # sampling time
+        self.dt = dt
+
+        # N states of state noises
+        self.sigma_B = [0, 0.1, 0, 0.1]
+        # M states of observation noises
+        self.sigma_W = np.sqrt(np.sum(np.square(self.amp))/np.power(10, np.array(self.SNR)/10)).tolist()
+    
+    # f(X, t): state tansition function maps states(X) to states(X_dot)
+    def f(self, X, t):
+        X_dot = np.zeros(len(self.sigma_B))
+        X_dot[1] = 2*np.pi*self.freq[0]
+        X_dot[3] = 2*np.pi*self.freq[1]
+        return X_dot
+    
+    # h(X): observation function maps states(X) to observations(Y)
+    def h(self, X):
+        Y = np.zeros(len(self.sigma_W))
+        Y[0] = X[0]*np.sin(X[1]) + X[2]*np.sin(X[3])
+        return Y
 
 if __name__ == "__main__":
-    # N states of frequency inputs
-    freq = [1.]
-    # M-by-N amplitude matrix
-    amp = [[10]]
-    # N states of state noises
-    sigma_B = [0.1]
-    # M states of signal noises
-    sigma_W = [0.1]
-
+    
     T = 10.
-    dt = 0.001
-    signal = Signal(freq=freq, amp=amp, sigma_B=sigma_B, sigma_W=sigma_W, dt=dt, T=T)
+    fs = 160
+    dt = 1/fs
+    signal_types = {'Linear':Linear, 'Sinusoidal':Sinusoidal, 'Sinusoidals':Sinusoidals}
+    signal_type = signal_types['Sinusoidals'](dt)
+    signal = Signal(signal_type=signal_type, T=T)
 
     fontsize = 20
     fig, ax = plt.subplots(1, 1, figsize=(9,7))
-    for i in range(signal.Y.shape[0]):
-        ax.plot(signal.t, signal.Y[i], label='$Y_{}$'.format(i+1))
+    for m in range(signal.Y.shape[0]):
+        ax.plot(signal.t, signal.Y[m,:], label='$Y_{}$'.format(m+1))
     plt.legend(fontsize=fontsize-5)
     plt.tick_params(labelsize=fontsize)
     plt.xlabel('time [s]', fontsize=fontsize)
