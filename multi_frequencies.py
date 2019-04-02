@@ -148,8 +148,6 @@ class Galerkin44(object):   # 4 states (r1, theta1, r2, theta2) 4 base functions
                                     [ np.zeros(X[:,0].shape[0]),          np.zeros(X[:,1].shape[0]),            np.cos(X[:,3]), -np.power(X[:,2],1)*np.sin(X[:,3])]]]
         return np.array(grad_grad_trial_functions)
 
-# 4 states (r1, theta1, r2, theta2) 4 base functions [r1*cos(theta1), r1*sin(theta1), r2*cos(theta2), r2*sin(theta2)]
-
 class Galerkin48(object):   # 4 states (r1, theta1, r2, theta2) 8 base functions [r1*cos(theta1), r1*sin(theta1), r2*cos(theta2), r2*sin(theta2), cos(theta1+theta2), sin(theta1+theta2), cos(theta1-theta2), sin(theta1-theta2)]
     # Galerkin approximation in finite element method
     def __init__(self):

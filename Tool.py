@@ -55,12 +55,20 @@ def isiterable(object):
         return False
     return True
 
-def find_limits(signals):
+def find_limits(signals, scale='normal'):
     """find the maximum and minimum of plot limits"""
     maximums = np.zeros(signals.shape[0])
     minimums = np.zeros(signals.shape[0])
     for i in range(signals.shape[0]):
         maximums[i] = np.max(signals[i])
         minimums[i] = np.min(signals[i])
-    signal_range = np.max(maximums)-np.min(minimums)
-    return np.min(minimums)-signal_range/10, np.max(maximums)+signal_range/10
+
+    if scale=='log':
+        signal_range = np.log10(np.max(maximums))-np.log10(np.min(minimums))
+        minimum = np.power(10, np.log10(np.min(minimums))-signal_range/100)
+        maximum = np.power(10, np.log10(np.max(maximums))+signal_range/100)
+    else:
+        signal_range = np.max(maximums)-np.min(minimums)
+        minimum = np.min(minimums)-signal_range/10
+        maximum = np.max(maximums)+signal_range/10
+    return minimum, maximum

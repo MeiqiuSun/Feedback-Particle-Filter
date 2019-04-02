@@ -425,7 +425,7 @@ class Galerkin310(object):       # 3 states (r, theta, omega) 10 base functions 
                                       [ np.zeros(X[:,0].shape[0]),           np.zeros(X[:,1].shape[0]),      np.power(X[:,2],2)/2]]]
         return np.array(grad_grad_trial_functions)
 
-class Galerkin4(object):       # 3 states (r, theta, omega, c) 4 base functions [r, r*cos(theta), r*sin(theta), omega, c]
+class Galerkin4(object):       # 4 states (r, theta, omega, c) 5 base functions [r, r*cos(theta), r*sin(theta), omega, c]
     # Galerkin approximation in finite element method
     def __init__(self):
         # L: int, number of trial (base) functions

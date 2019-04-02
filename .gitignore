@@ -2,3 +2,5 @@ __pycache__
 Jin/__pycache__
 .DS_Store
 .vscode
+baseline_modulation/signals
+baseline_modulation/filtered_signals

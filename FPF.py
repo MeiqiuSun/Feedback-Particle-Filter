@@ -178,7 +178,7 @@ class FPF(object):
         self.particles.update()
         return dU
 
-    def run(self, y):
+    def run(self, y, show_time=False):
         """Run FPF with time series observations(y):
             Arguments = 
                 y: numpy array with the shape of (M,T/dt+1), observations in time series
@@ -196,7 +196,7 @@ class FPF(object):
         c = np.zeros([self.M, self.galerkin.L, y.shape[1]]) 
         X_mean = np.zeros([self.N, y.shape[1]])
         for k in range(y.shape[1]):
-            if np.mod(k,int(1/self.dt))==0:
+            if show_time and np.mod(k,int(1/self.dt))==0:
                 print("===========time: {} [s]==============".format(int(k*self.dt)))
             dU[:,:,k] = self.update(y[:,k])
             h_hat[:,k] = self.h_hat
@@ -305,6 +305,8 @@ class Figure(object):
 
     def set_limits(self, signal, n=np.nan, center=False):
         limits = find_limits(signal)
+        if not 'restrictions' in self.fig_property.keys():
+            return limits
         if not np.isnan(n):
             if not np.isnan(self.fig_property.restrictions.mod[n]):
                 limits = find_limits(np.array([0, self.fig_property.restrictions.mod[n]]))
