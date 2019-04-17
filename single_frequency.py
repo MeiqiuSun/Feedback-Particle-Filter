@@ -247,7 +247,7 @@ class Galerkin0(object):        # 2 states (r, theta) 2 base functions [r*cos(th
 
 class Galerkin1(object):        # 2 states (r, theta) 3 base functions [r, r*cos(theta), r*sin(theta)]
     # Galerkin approximation in finite element method
-    def __init__(self):
+    def __init__(self, m):
         # L: int, number of trial (base) functions
         self.L = 3       # trial (base) functions
         

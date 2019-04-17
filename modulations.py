@@ -92,48 +92,49 @@ def plot_signal(signal):
     plt.xlabel('time [s]', fontsize=fontsize)
 
 if __name__ == "__main__":
-    T = 20.
-    fs = 160
-    dt = 1/fs
-    rho = 10
+    plot_test_signal()
+    # T = 20.
+    # fs = 160
+    # dt = 1/fs
+    # rho = 10
     
-    r0 = 2
-    freq0 = 6
-    c0 = 1
-    X0 = [r0, 0, 2*np.pi*freq0, c0]
-    sigma_B = [0, 0.1, 0, 0]
+    # r0 = 2
+    # freq0 = 6
+    # c0 = 1
+    # X0 = [r0, 0, 2*np.pi*freq0, c0]
+    # sigma_B = [0, 0.1, 0, 0]
 
-    amp_r = 0
-    freq_r = 1
-    amp_omega = 0
-    freq_omega = 1
-    amp_c = 1
-    freq_c = 1
-    signal_type = Modulations(dt, rho, X0, sigma_B, amp_r, freq_r, amp_omega, freq_omega, amp_c, freq_c)
-    signal = Signal(signal_type=signal_type, T=T)
+    # amp_r = 0
+    # freq_r = 1
+    # amp_omega = 0
+    # freq_omega = 1
+    # amp_c = 1
+    # freq_c = 1
+    # signal_type = Modulations(dt, rho, X0, sigma_B, amp_r, freq_r, amp_omega, freq_omega, amp_c, freq_c)
+    # signal = Signal(signal_type=signal_type, T=T)
     
-    Np = 1000
-    freq_range = [freq0-1, freq0+1]
-    amp_range = [r0*0.9,r0*1.1]
-    c_range = [0, 3]
-    model = Model4(amp_range=amp_range, freq_range=freq_range, c_range=c_range, min_sigma_B=0.01, min_sigma_W=0.5)
-    galerkin = Galerkin4()
-    signal_type.sigma_B[3] = 2
-    # signal_type.sigma_B[0] = 0.1
-    fpf = FPF(number_of_particles=Np, model=model, galerkin=galerkin, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
-    filtered_signal = fpf.run(signal.Y)
+    # Np = 1000
+    # freq_range = [freq0-1, freq0+1]
+    # amp_range = [r0*0.9,r0*1.1]
+    # c_range = [0, 3]
+    # model = Model4(amp_range=amp_range, freq_range=freq_range, c_range=c_range, min_sigma_B=0.01, min_sigma_W=0.5)
+    # galerkin = Galerkin4()
+    # signal_type.sigma_B[3] = 2
+    # # signal_type.sigma_B[0] = 0.1
+    # fpf = FPF(number_of_particles=Np, model=model, galerkin=galerkin, sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
+    # filtered_signal = fpf.run(signal.Y)
 
-    fontsize = 20
-    fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, particles_ratio=0.01, restrictions=restrictions(model.states), \
-                          plot_histogram=False, n_bins = 100, plot_c=False)
-    figs = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal).plot()
-    figs = set_yaxis(figs, model)
+    # fontsize = 20
+    # fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, particles_ratio=0.01, restrictions=restrictions(model.states), \
+    #                       plot_histogram=False, n_bins = 100, plot_c=False)
+    # figs = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal).plot()
+    # figs = set_yaxis(figs, model)
     # plt.figure()
     # plt.plot(signal.t, signal.Y[0]-filtered_signal.h_hat[0])
-    figs['X'].axes[3].plot(signal.t, filtered_signal.X_mean[3], color='black')
-    figs['X'].axes[3].plot(signal.t, signal.X[3], color='red')
-    figs['X'].axes[2].plot(signal.t, filtered_signal.X_mean[2]/2/np.pi, color='black')
-    figs['X'].axes[2].plot(signal.t, signal.X[2]/2/np.pi, color='red')
+    # figs['X'].axes[3].plot(signal.t, filtered_signal.X_mean[3], color='black')
+    # figs['X'].axes[3].plot(signal.t, signal.X[3], color='red')
+    # figs['X'].axes[2].plot(signal.t, filtered_signal.X_mean[2]/2/np.pi, color='black')
+    # figs['X'].axes[2].plot(signal.t, signal.X[2]/2/np.pi, color='red')
     # plt.figure()
     # for i in range(fpf.particles.Np):
     #     plt.plot(signal.t, filtered_signal.dU[i,3])

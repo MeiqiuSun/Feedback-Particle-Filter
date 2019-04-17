@@ -72,3 +72,7 @@ def find_limits(signals, scale='normal'):
         minimum = np.min(minimums)-signal_range/10
         maximum = np.max(maximums)+signal_range/10
     return minimum, maximum
+
+if __name__ == "__main__":
+    pass
+    

@@ -80,8 +80,8 @@ class Galerkin(object):       #  1 state (c) 1 base functions [c]
 
 def generate_signals(c0=0, amp_c=1, freq_c=1, sigma_B=0.1, n=10):
         
-    T = 20.
-    fs = 100
+    T = 2000.
+    fs = 1
     dt = 1/fs
     rho = 10
     
@@ -95,6 +95,9 @@ def generate_signals(c0=0, amp_c=1, freq_c=1, sigma_B=0.1, n=10):
     print("Generating Signal(s) ...")
     for k in range(n):
         signal = Signal(signal_type=signal_type, T=T)
+        # print(np.array(signal.t))
+
+        np.savetxt('signals/signal{}.csv'.format(k), np.transpose(np.array([signal.t, signal.Y[0]])), delimiter=',')
         with open('signals/signal{}.pickle'.format(k), 'wb') as handle:
             pickle.dump(signal, handle)
     print("Finish Generating Signal(s)!")
@@ -169,7 +172,7 @@ def plot_variance(fontsize = 20, signal_name = 'signal0', savefig=False):
     # ax.set_xlim(find_limits(ax.get_xticks(), scale='log'))
     ax.set_ylim(find_limits(ax.get_yticks()))
     ax.tick_params(labelsize=fontsize)
-    ax.set_xlabel(r'$\sigma_B^{(i)}$', fontsize=fontsize)
+    ax.set_xlabel(r'$\sigma_b^{(i)}$', fontsize=fontsize)
     ax.set_ylabel(r'$c_0^{(i)}$ range', fontsize=fontsize)
     ax.set_title(r'$Var(\hat h_t)$', fontsize=fontsize+2)
     if savefig:
@@ -189,7 +192,7 @@ def plot_variance(fontsize = 20, signal_name = 'signal0', savefig=False):
                 figs['X'].axes[0].legend(fontsize=fontsize-5, loc='lower right', ncol=2)
                 figs['X'].axes[0].tick_params(labelsize=fontsize)
                 figs['X'].axes[0].set_ylim(find_limits(np.array([-3, 2])))
-                figs['X'].axes[0].set_title(r'$\sigma_B={:.2f},\ \ c_0\sim$uniform$({:.2f},\ {:.2f})$'.format(data.sigma_B[int((data.sigma_B.shape[0]-1)*i/2)], \
+                figs['X'].axes[0].set_title(r'$\sigma_b^{(i)}={:.2f},\ \ c_0^{(i)}\sim$uniform$({:.2f},\ {:.2f})$'.format(data.sigma_B[int((data.sigma_B.shape[0]-1)*i/2)], \
                                                                                     data.c_range[int((data.c_range.shape[0]-1)*j/2),0], \
                                                                                     data.c_range[int((data.c_range.shape[0]-1)*j/2),1]), fontsize=fontsize+2)
                 if savefig:
@@ -210,10 +213,12 @@ def final_graph():
 
 if __name__ == "__main__":
 
-    # generate_signals()
-    filter_signals()
-    process_signals()
-    plot_variance(savefig=True)
+    signal_type, signal = generate_signals()
+    plt.figure()
+    plt.plot(signal.t, signal.Y[0])
+    # filter_signals()
+    # process_signals()
+    # plot_variance(savefig=True)
     # final_graph()
     plt.show()
 

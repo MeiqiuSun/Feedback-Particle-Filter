@@ -18,32 +18,29 @@ class FPF(object):
     """FPF: Feedback Partilce Filter
         Notation Note:
             Np: number of particles
-            N: number of states (x)
-            M: number of observations(y)
-        Initialize = FPF(number_of_particles, f_min, f_max, sigma_W, dt, h)
+        Initialize = FPF(number_of_particles, model, galerkin, sigma_B, sigma_W, dt)
             number_of_particles: integer, number of particles
-            f_min: float, minimum frequency in Hz
-            f_max: float, maximum frequency in Hz
-            sigma_W: 1D list of float with legnth M, standard deviations of noise of observations(y)
+            model: class Model, f and h are defined at here
+            galerkin: class Galerkin, base functions are defined at here
+            sigma_B: 1D list of float with length N, standard deviations of process noise(X)
+            sigma_W: 1D list of float with legnth M, standard deviations of noise of observations(Y)
             dt: float, size of time step in sec
-            h: function, estimated observation dynamics
-            indep_amp_update: bool, if update amplitude independently 
-        Members = 
-            particles: Particles
-            sigma_W: numpy array with the shape of (M,1), standard deviation of noise of observations(y)
+        Members =
+            sigma_B: numpy array with the shape of (N,), standard deviations of process noise(X)
+            sigma_W: numpy array with the shape of (M,), standard deviations of noise of observations(Y)
+            N: number of states(X)
+            M: number of observations(Y)
             dt: float, size of time step in sec
+            particles: class Particles,
+            f: function, state dynamics
             h: function, estimated observation dynamics
+            galerkin: class Galerkin, base functions are defined at here
             h_hat: numpy array with the shape of (M,), filtered observations
-            indep_amp_update: bool, if update amplitude independently 
         Methods =
-            correction(dI, dh): Correct the theta prediction with new observations(y)
+            optimal_control(dZ, dI): calculate the optimal control with new observations(Y)
             calculate_h_hat(): Calculate h for each particle and h_hat by averaging h from all particles
-            calculate_omega(): Calculate average omega from all particles
-            calculate_amp(): Calculate average amplitude form all particles
-            get_freq(): return average frequency (Hz) 
-            get_amp(): return average amplitude 
-            update(y): Update each particle with new observations(y)
-            run(y): Run FPF with time series observations(y)
+            update(Y): Update each particle with new observations(Y)
+            run(Y): Run FPF with time series observations(Y)
     """
     def __init__(self, number_of_particles, model, galerkin, sigma_B, sigma_W, dt):
         self.sigma_B = model.modified_sigma_B(np.array(sigma_B))
@@ -61,17 +58,15 @@ class FPF(object):
         self.c = np.zeros([self.M, self.galerkin.L])
         self.h_hat = np.zeros(self.M)
     
-    def optimal_control(self, dz, dI):
-        """calculate the optimal control with new observations(y):
+    def optimal_control(self, dI, dZ):
+        """calculate the optimal control with new observations(Y):
             Arguments = 
-                dz: numpy array with the shape of ( 1,M), integral of y over time period dt
                 dI: numpy array with the shape of (Np,M), inovation process
-                dh: numpy array with the shape of (Np,M), the esitmated observation for Np particles minus their average
             Variables = 
                 K: numpy array with the shape of (Np,N,M), gain for each particle
                 partial_K: numpy array with the shape of (Np,N,M,N), partial_K/partial_X for each particle
-                dI: numpy array with the shape of (Np,M,1), inovation process 
         """
+
         def calculate_K(self):
             """calculate the optimal feedback gain function K by using Galerkin Approximation to solve the BVP
                 Variables = 
@@ -107,7 +102,7 @@ class FPF(object):
             def calculate_b(self, m, psi):
                 """calculate the b vector in the Galerkin Approximation in Finite Element Method
                     Arguments = 
-                        m: int, mth of channel (m in [M])
+                        m: int, mth of channel
                         psi: numpy array with the shape of (L,Np), base functions psi
                     Variables = 
                         normalized_dh: numpy array with the shape of (Np,), normalized mth channel of filtered observation difference between each particle and mean
@@ -122,7 +117,7 @@ class FPF(object):
             K = np.zeros([self.particles.Np, self.N, self.M])
             partial_K = np.zeros([self.particles.Np, self.N, self.M, self.N])
             psi = self.galerkin.psi(X=self.particles.X)
-            grad_psi = self.galerkin.grad_psi(X=self.particles.X)
+            grad_psi = self.galerkin.grad_psi(X=self.particles.X)            
             grad_grad_psi = self.galerkin.grad_grad_psi(X=self.particles.X)
             A = calculate_A(self, grad_psi)
             b = np.zeros([self.M, self.galerkin.L])
@@ -135,23 +130,10 @@ class FPF(object):
                     partial_K[:,:,m,:] += c[m,l]*np.transpose(grad_grad_psi[l], (2,0,1))
             self.c = c
             return K, partial_K
-        
-        def correction_term(self, K, partial_K):
-            """calculate the Wong-Zakai correction term
-                correction: numpy array with the shape of (Np,N), correction term from Stratonovich form to Ito form
-            """
-            correction = np.zeros([self.particles.Np, self.N])
-            for ni in range(self.N):
-                for nj in range(self.N):
-                    correction[:,ni] += np.sum(K[:,nj,:]*partial_K[:,ni,:,nj]*np.square(self.sigma_W), axis=1)
-            correction = 0.5*correction
-            return correction
 
         K, partial_K = calculate_K(self)
-        dz = np.reshape(np.repeat(dz, repeats=self.particles.Np, axis=0), [self.particles.Np, self.M, 1])
-        dI = np.reshape(dI, [dI.shape[0], dI.shape[1], 1])
-        
-        return np.reshape(np.matmul(K, dI), [self.particles.Np, self.N]) + correction_term(self, K, partial_K)*self.dt
+        # return np.einsum('inm,m->in',K,dZ[0,:]) - np.einsum('inm,m->in',K,self.h_hat)*self.dt
+        return np.einsum('inm,im->in',K,dI) + 0.5*np.einsum('ijm,inmj->in',K,np.einsum('inmj,m->inmj',partial_K,np.square(self.sigma_W)))*self.dt
     
     def calculate_h_hat(self):
         """Calculate h for each particle and h_hat by averaging h from all particles"""
@@ -159,46 +141,46 @@ class FPF(object):
         h_hat = np.mean(self.particles.h, axis=0)
         return h_hat
 
-    def update(self, y):
-        """Update each particle with new observations(y):
+    def update(self, Y):
+        """Update each particle with new observations(Y):
             argument =
-                y: numpy array with the shape of (M,), new observation data at a fixed time
+                Y: numpy array with the shape of (M,), new observation data at a fixed time
             variables =
-                dz: numpy array with the shape of ( 1,M), integral of y over time period dt
+                dZ: numpy array with the shape of ( 1,M), integral of y over time period dt
                 dI: numpy array with the shape of (Np,M), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
                 dX: numpy array with the shape of (Np,N), states increment for each particle
                 dU: numpy array with the shape of (Np,N), optimal control input for each particle
         """
-        dz = np.reshape(y*self.dt, [1, y.shape[0]])
-        dI = dz-np.repeat(0.5*(self.particles.h+self.h_hat)*self.dt, repeats=dz.shape[1], axis=1)
+        dZ = np.reshape(Y*self.dt, [1, Y.shape[0]])
+        dI = dZ-0.5*(self.particles.h+self.h_hat)*self.dt
         dX = self.f(self.particles.X)*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
-        dU = self.optimal_control(dz, dI)
+        dU = self.optimal_control(dI, dZ)
         self.particles.X += dX+dU
         self.h_hat = self.calculate_h_hat()
         self.particles.update()
         return dU
 
-    def run(self, y, show_time=False):
-        """Run FPF with time series observations(y):
+    def run(self, Y, show_time=False):
+        """Run FPF with time series observations(Y):
             Arguments = 
-                y: numpy array with the shape of (M,T/dt+1), observations in time series
+                Y: numpy array with the shape of (M,T/dt+1), observations in time series
             Variables = 
                 h_hat: numpy array with the shape of (M,T/dt+1), filtered observations in time series
                 X: numpy array with the shape of (N,T/dt+1), the states for N particles in time series
             Return =
                 filtered_signal: Struct(h_hat, X), filtered observations with information of particles
         """
-        h_hat = np.zeros(y.shape)
-        L2_error = np.zeros(y.shape)
-        h = np.zeros([self.particles.Np, self.M, y.shape[1]])
-        X = np.zeros([self.particles.Np, self.N, y.shape[1]])
-        dU = np.zeros([self.particles.Np, self.N, y.shape[1]])
-        c = np.zeros([self.M, self.galerkin.L, y.shape[1]]) 
-        X_mean = np.zeros([self.N, y.shape[1]])
-        for k in range(y.shape[1]):
+        h_hat = np.zeros(Y.shape)
+        error = np.zeros(Y.shape)
+        h = np.zeros([self.particles.Np, self.M, Y.shape[1]])
+        X = np.zeros([self.particles.Np, self.N, Y.shape[1]])
+        dU = np.zeros([self.particles.Np, self.N, Y.shape[1]])
+        c = np.zeros([self.M, self.galerkin.L, Y.shape[1]]) 
+        X_mean = np.zeros([self.N, Y.shape[1]])
+        for k in range(Y.shape[1]):
             if show_time and np.mod(k,int(1/self.dt))==0:
                 print("===========time: {} [s]==============".format(int(k*self.dt)))
-            dU[:,:,k] = self.update(y[:,k])
+            dU[:,:,k] = self.update(Y[:,k])
             h_hat[:,k] = self.h_hat
             h[:,:,k] = self.particles.h
             X[:,:,k] = self.particles.X
@@ -206,9 +188,9 @@ class FPF(object):
             c[:,:,k] = self.c
         # for m in range(y.shape[0]):
         #     L2_error[m,:] = np.sqrt(np.cumsum(np.square(y[m]-h_hat[m])*self.dt)/(self.dt*(y.shape[1]-1)))/self.sigma_W[m]
-        for m in range(y.shape[0]):
-            L2_error[m,:] = y[m]-h_hat[m]
-        return Struct(h_hat=h_hat, L2_error=L2_error, h=h, X=X, X_mean=X_mean, dU=dU, c=c)
+        for m in range(Y.shape[0]):
+            error[m,:] = Y[m,:]-h_hat[m,:]
+        return Struct(h_hat=h_hat, L2_error=error, h=h, X=X, X_mean=X_mean, dU=dU, c=c)
 
 class Figure(object):
     """Figure: Figures for Feedback Partilce Filter
