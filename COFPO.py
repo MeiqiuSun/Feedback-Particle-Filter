@@ -55,11 +55,12 @@ class COFPO(object):
 
     def train(self, Y):
         print("Starting Trainning ...")
-        self.cofpf_train.run(Y)
+        filtered_signal = self.cofpf_train.run(Y)
         print("End Trainning ...")
         for j in range(self.cofpf_train.Nc):
-            self.r[:,j] = np.mean(self.cofpf_train.fpf[j].particles.X[:,1:], axis=0)
+            self.r[:,j] = np.mean(self.cofpf_train.fpf[j].particles.X[:,1:]**2, axis=0)
         print(self.r)
+        return filtered_signal
 
     def test(self, Y):
         filtered_signal = self.cofpf_test.run(Y)
@@ -69,10 +70,10 @@ class COFPO(object):
         for m in self.unknown_observations:
             for nc in range(self.cofpf_test.Nc):
                 Y_hat[m-1,:] += self.r[m-1,nc]*np.mean(np.cos(filtered_signal.X[nc][:,0,:]), axis=0)
-        fontsize = 20
-        fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, particles_ratio=0.01,\
-                            plot_histogram=True, n_bins = 100, plot_c=False)
-        figs = Figure(fig_property=fig_property, signal=signal_test, filtered_signal=filtered_signal).plot()
+        # fontsize = 20
+        # fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, particles_ratio=0.01,\
+        #                     plot_histogram=True, n_bins = 100, plot_c=False)
+        # figs = Figure(fig_property=fig_property, signal=signal_test, filtered_signal=filtered_signal).plot()
         return Y_hat
 
         
@@ -80,17 +81,22 @@ class COFPO(object):
 
 
 if __name__ == "__main__":
-    T = 50.
+    T = 5.
     fs = 160
     dt = 1/fs
-    signal_type1 = Sinusoidals(dt, amp=[1,3], freq=[1.2,3.8])
-    signal_type2 = Sinusoidals(dt, amp=[2], freq=[3.8])
+    signal_type1 = Sinusoidals(dt, amp=[1,3], freq=[1.5,3.5])
+    signal_type2 = Sinusoidals(dt, amp=[2], freq=[3.5])
     
     signal_train = Signal(signal_type1, T) + Signal(signal_type2, T)
     signal_test = Signal(signal_type1, T)
     
-    cofpo = COFPO(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,4],[0,4]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 1, 1], sigma_W=[1,1], dt=signal_train.dt, known_observations=[1])
-    cofpo.train(signal_train.Y)
+    cofpo = COFPO(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,2],[0,2]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 1, 1], sigma_W=[1,1], dt=signal_train.dt, known_observations=[1])
+    filtered_signal = cofpo.train(signal_train.Y)
+    plt.figure()
+    plt.plot(signal_train.t, np.mean(filtered_signal.X[0][:,1,:]**2, axis=0))
+    plt.plot(signal_train.t, np.mean(filtered_signal.X[0][:,2,:]**2, axis=0))
+    plt.plot(signal_train.t, np.mean(filtered_signal.X[1][:,1,:]**2, axis=0))
+    plt.plot(signal_train.t, np.mean(filtered_signal.X[1][:,2,:]**2, axis=0))
     Y_hat = cofpo.test(signal_train.Y[0:1,:])
     plt.figure()
     plt.plot(signal_train.t, signal_train.Y[0])

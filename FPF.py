@@ -51,7 +51,7 @@ class FPF(object):
 
         self.particles = Particles(number_of_particles=number_of_particles, \
                                     X0_range=model.X0_range, states_constraints=model.states_constraints, \
-                                    M=self.M, dt=self.dt) 
+                                    M=self.M) 
         self.f = model.f
         self.h = model.h
         self.galerkin = galerkin
@@ -301,7 +301,10 @@ class Figure(object):
 
     def plot_X(self, axes):
         Np = self.filtered_signal.X.shape[0]
-        sampling_number = np.random.choice(Np, size=int(Np*self.fig_property.particles_ratio), replace=False)
+        if 'particles_ratio' in self.fig_property.__dict__ :
+            sampling_number = np.random.choice(Np, size=int(Np*self.fig_property.particles_ratio), replace=False)
+        else :
+            sampling_number = np.array(range(Np))
 
         def plot_Xn(self, ax, sampling_number, n=0):
             state_of_filtered_signal = self.modified(self.filtered_signal.X[:,n,:], n)
@@ -317,16 +320,21 @@ class Figure(object):
 
     def plot_histogram(self, axes):
 
-        def plot_histogram_Xn(self, ax, n=0, k=-1):
+        def plot_histogram_Xn(self, ax, bins, n=0, k=-1):
             state_of_filtered_signal = self.modified(self.filtered_signal.X[:,n,:], n)
-            ax.hist(state_of_filtered_signal[:,k], bins=self.fig_property.n_bins, color='blue', orientation='horizontal')
+            ax.hist(state_of_filtered_signal[:,k], bins=bins, color='blue', orientation='horizontal')
             ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0], symbol=''))
             ax.tick_params(labelsize=self.fig_property.fontsize)
             ax.set_ylim(self.set_limits(state_of_filtered_signal, n=n))
             return ax
+        
+        if 'n_bins' in self.fig_property.__dict__ :
+            bins = self.fig_property.n_bins
+        else :
+            bins = 100
 
         for n, ax in enumerate(axes):
-            plot_histogram_Xn(self, ax, n)
+            plot_histogram_Xn(self, ax, bins, n)
         return axes
 
     def plot_c(self, axes, m):

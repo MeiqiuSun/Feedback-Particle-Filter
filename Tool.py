@@ -8,24 +8,25 @@ import numpy as np
 
 class Particles(object):
     """Particles:
-        Initialize = Particles(number_of_particles, X0_range, states_constraints, M, dt)
+        Notation Note:
+            D: dimenstion of states (X)
+        Initialize = Particles(number_of_particles, X0_range, states_constraints, M)
             number_of_particles: integer, number of particles
+            X0_range: 2D list of float with length D-by-2, range of initial states
+            states_constraints: function, constraints on states
+            M: integer, number of outputs
         Members =
             Np: integer, number of particles
-            h: numpy array with the shape of (Np,1), the esitmated observation for Np particles
+            X: 
+            h: numpy array with the shape of (Np,M), the esitmated observations for Np particles
+            states_constraints: function, constraints on states
         Methods =
-            update(): mod the angle of each particle with 2pi and update omega with PI controller
-            update_sync_matrix(): update synchronized matrix
-            check_sync(): check synchronized frequencies
-            get_theta(): return a numpy array with the shape of (Np,) of angle (rad) for Np particles
-            get_freq(): return a numpy array with the shape of (Np,) of frequency (Hz) for Np particles
-            get_amp: return a numpy array with the shape of (Np,) of amplitude for Np particles
-            get_freq_range(): return a numpy array with the shape of (Np,) of frequency range (Hz) for Np particles
+            update(): use states_constraints function to update states in all particles
+            get_X(): return X (if the dimenstion of states (D) is 1, then the shape of return array is (Np,), otherwise (Np, D))
     """
 
-    def __init__(self, number_of_particles, X0_range, states_constraints, M, dt):
+    def __init__(self, number_of_particles, X0_range, states_constraints, M):
         """Initialize Particles"""
-        self.dt = dt
         self.Np = int(number_of_particles)
         # initialize states (X)
         self.X = np.zeros([self.Np, len(X0_range)])

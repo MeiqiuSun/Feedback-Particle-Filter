@@ -58,7 +58,7 @@ class COFPF(object):
         return
     
     class Model(object):
-        """Model: states X^{(i)}=[ theta, r1, r2, ..., rM]^{(i)}
+        """Model: states X^{(i)}=[ theta, rc_1, rs_1, rc_2, rs_2..., rc_M, rs_M]^{(i)}
             Notation Note =
                 Np: int, number of particles
                 X: numpy array with the shape of (Np,N), particle states
@@ -85,15 +85,25 @@ class COFPF(object):
         """
         def __init__(self, amp_ranges, freq_range, min_sigma_B=0.01, min_sigma_W=0.1):
             self.M = len(amp_ranges)
-            self.N = self.M+1
+            self.N = 2*self.M+1
 
-            self.states = ['r{}'.format(m+1) for m in range(self.M)]
-            self.states.insert(0, 'theta')
-            self.states_label = [r'$r_{}$'.format(m+1) for m in range(self.M)]
-            self.states_label.insert(0, r'$\theta$')
+            self.states = ['theta'] * self.N
+            self.states_label = [r'$\theta$'] * self.N
+            self.X0_range = [[0,2*np.pi]] *self.N
+            for m in range(self.M):
+                self.states[2*m+1] = 'rc_{}'.format(m+1)
+                self.states[2*m+2] = 'rs_{}'.format(m+1)
+                self.states_label[2*m+1] = r'$rc_{}$'.format(m+1)
+                self.states_label[2*m+2] = r'$rs_{}$'.format(m+1)
+                self.X0_range[2*m+1] = amp_ranges[m]
+                self.X0_range[2*m+2] = amp_ranges[m]
+            # self.states = ['rc_{}'.format(m+1) for m in range(self.M)]
+            # self.states.insert(0, 'theta')
+            # self.states_label = [r'$r_{}$'.format(m+1) for m in range(self.M)]
+            # self.states_label.insert(0, r'$\theta$')
             
-            self.X0_range = [amp_ranges[m] for m in range(self.M)]
-            self.X0_range.insert(0,[0,2*np.pi])
+            # self.X0_range = [amp_ranges[m] for m in range(self.M)]
+            # self.X0_range.insert(0,[0,2*np.pi])
             self.freq_range = freq_range
             
             self.min_sigma_B = min_sigma_B
@@ -119,7 +129,7 @@ class COFPF(object):
         def h(self, X):
             Y = np.zeros([X.shape[0], self.M])
             for m in range(self.M):
-                Y[:,m] = (X[:,m+1])**2*np.cos(X[:,0]) 
+                Y[:,m] = (X[:,2*m+1])**2*np.cos(X[:,0]) + (X[:,2*m+2])**2*np.sin(X[:,0])
             return Y
     
     class Galerkin(object):
@@ -154,7 +164,7 @@ class COFPF(object):
         def __init__(self, states, M):
             self.N = len(states)
             self.M = M
-            self.L = 2*self.M
+            self.L = 4*self.M
             
             self.states = ['self.'+state for state in states]
             self.result = ''
@@ -166,8 +176,10 @@ class COFPF(object):
             # initialize psi
             self.psi_string = '['
             for m in range(self.M):
-                self.psi_list[2*m] = 'self.r{}**2*sympy.cos(self.theta)'.format(m+1)
-                self.psi_list[2*m+1] = 'self.r{}**2*sympy.sin(self.theta)'.format(m+1)
+                self.psi_list[4*m] = 'self.rc_{}**2*sympy.cos(self.theta)'.format(m+1)
+                self.psi_list[4*m+1] = 'self.rc_{}**2*sympy.sin(self.theta)'.format(m+1)
+                self.psi_list[4*m+2] = 'self.rs_{}**2*sympy.cos(self.theta)'.format(m+1)
+                self.psi_list[4*m+3] = 'self.rs_{}**2*sympy.sin(self.theta)'.format(m+1)
             self.psi_string += (', '.join(self.psi_list)).replace('sympy','np')
             self.psi_string += ']'
             
@@ -445,6 +457,7 @@ class Figure(object):
                 ax.set_xlim([0, max_percentage])
 
         return axes
+
 def restrictions(states):
     mod = []
     scaling = []
@@ -482,33 +495,34 @@ def set_yaxis(figs, models):
 
     
 if __name__ == "__main__":
-    T = 50.
+    T = 5.
     fs = 160
     dt = 1/fs
     signal_type1 = Sinusoidals(dt, amp=[1,3], freq=[1.2,3.8])
-    signal_type2 = Sinusoidals(dt, amp=[2], freq=[1.2])
-    signal = Signal(signal_type1, T) + Signal(signal_type2, T)
+    # signal_type2 = Sinusoidals(dt, amp=[2], freq=[1.2])
+    signal = Signal(signal_type1, T) # + Signal(signal_type2, T)
     
-    # cofpf = COFPF(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,4]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 1], sigma_W=[0.2], dt=signal.dt)
-    cofpf = COFPF(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,2],[0,2]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 0.1, 0.1], sigma_W=[1,1], dt=signal.dt)
+    cofpf = COFPF(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,2]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 1, 1, 1, 1], sigma_W=[1], dt=signal.dt)
+    # cofpf = COFPF(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,2],[0,2]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 0.1, 0.1, 0.1, 0.1], sigma_W=[1,1], dt=signal.dt)
+
     filtered_signal = cofpf.run(signal.Y)
     
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, particles_ratio=0.01,\
-                          plot_histogram=True, n_bins = 100, plot_c=False)
-    figs = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal).plot()
-    figs['X'].axes[0][1].axhline(np.sqrt(signal_type1.amp[0]), color='black', linestyle='--')
-    figs['X'].axes[0][1].plot(signal.t, np.mean(filtered_signal.X[0][:,1,:], axis=0), color='blue', linewidth=2)
-    figs['X'].axes[0][2].axhline(np.sqrt(signal_type2.amp[0]), color='black', linestyle='--')
-    figs['X'].axes[0][2].plot(signal.t, np.mean(filtered_signal.X[0][:,2,:], axis=0), color='blue', linewidth=2)
-    figs['X'].axes[1][1].axhline(np.sqrt(signal_type1.amp[1]), color='black', linestyle='--')
-    figs['X'].axes[1][1].plot(signal.t, np.mean(filtered_signal.X[1][:,1,:], axis=0), color='blue', linewidth=2)    
-    figs['X'].axes[1][2].axhline(0, color='black', linestyle='--')
-    figs['X'].axes[1][2].plot(signal.t, np.mean(filtered_signal.X[1][:,2,:], axis=0), color='blue', linewidth=2)
-    figs['histogram'].axes[0][1].axhline(np.sqrt(signal_type1.amp[0]), color='black', linestyle='--')
-    figs['histogram'].axes[0][2].axhline(np.sqrt(signal_type2.amp[0]), color='black', linestyle='--')
-    figs['histogram'].axes[1][1].axhline(np.sqrt(signal_type1.amp[1]), color='black', linestyle='--')
-    figs['histogram'].axes[1][2].axhline(0, color='black', linestyle='--')
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=False, particles_ratio=0.01,\
+                          plot_histogram=False, n_bins = 100, plot_c=False)
+    # figs = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal).plot()
+    # figs['X'].axes[0][1].axhline(np.sqrt(signal_type1.amp[0]), color='black', linestyle='--')
+    # figs['X'].axes[0][1].plot(signal.t, np.mean(filtered_signal.X[0][:,1,:], axis=0), color='blue', linewidth=2)
+    # figs['X'].axes[0][2].axhline(np.sqrt(signal_type2.amp[0]), color='black', linestyle='--')
+    # figs['X'].axes[0][2].plot(signal.t, np.mean(filtered_signal.X[0][:,2,:], axis=0), color='blue', linewidth=2)
+    # figs['X'].axes[1][1].axhline(np.sqrt(signal_type1.amp[1]), color='black', linestyle='--')
+    # figs['X'].axes[1][1].plot(signal.t, np.mean(filtered_signal.X[1][:,1,:], axis=0), color='blue', linewidth=2)    
+    # figs['X'].axes[1][2].axhline(0, color='black', linestyle='--')
+    # figs['X'].axes[1][2].plot(signal.t, np.mean(filtered_signal.X[1][:,2,:], axis=0), color='blue', linewidth=2)
+    # figs['histogram'].axes[0][1].axhline(np.sqrt(signal_type1.amp[0]), color='black', linestyle='--')
+    # figs['histogram'].axes[0][2].axhline(np.sqrt(signal_type2.amp[0]), color='black', linestyle='--')
+    # figs['histogram'].axes[1][1].axhline(np.sqrt(signal_type1.amp[1]), color='black', linestyle='--')
+    # figs['histogram'].axes[1][2].axhline(0, color='black', linestyle='--')
     plt.show()
     # figs = set_yaxis(figs, cofpo.model)
 
