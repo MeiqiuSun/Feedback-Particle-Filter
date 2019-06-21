@@ -499,30 +499,30 @@ if __name__ == "__main__":
     fs = 160
     dt = 1/fs
     signal_type1 = Sinusoidals(dt, amp=[1,3], freq=[1.2,3.8])
-    # signal_type2 = Sinusoidals(dt, amp=[2], freq=[1.2])
-    signal = Signal(signal_type1, T) # + Signal(signal_type2, T)
+    signal_type2 = Sinusoidals(dt, amp=[2], freq=[1.2])
+    signal = Signal(signal_type1, T) + Signal(signal_type2, T)
     
-    cofpf = COFPF(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,2]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 1, 1, 1, 1], sigma_W=[1], dt=signal.dt)
-    # cofpf = COFPF(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,2],[0,2]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 0.1, 0.1, 0.1, 0.1], sigma_W=[1,1], dt=signal.dt)
+    # cofpf = COFPF(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,2]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 1, 1, 1, 1], sigma_W=[1], dt=signal.dt)
+    cofpf = COFPF(number_of_channels=2, numbers_of_particles=[1000,1000], amp_ranges=[[0,2],[0,2]], freq_ranges=[[1,2],[3,4]], sigma_B=[0, 0.1, 0.1, 0.1, 0.1], sigma_W=[1,1], dt=signal.dt)
 
     filtered_signal = cofpf.run(signal.Y)
     
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=False, particles_ratio=0.01,\
-                          plot_histogram=False, n_bins = 100, plot_c=False)
-    # figs = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal).plot()
-    # figs['X'].axes[0][1].axhline(np.sqrt(signal_type1.amp[0]), color='black', linestyle='--')
-    # figs['X'].axes[0][1].plot(signal.t, np.mean(filtered_signal.X[0][:,1,:], axis=0), color='blue', linewidth=2)
-    # figs['X'].axes[0][2].axhline(np.sqrt(signal_type2.amp[0]), color='black', linestyle='--')
-    # figs['X'].axes[0][2].plot(signal.t, np.mean(filtered_signal.X[0][:,2,:], axis=0), color='blue', linewidth=2)
-    # figs['X'].axes[1][1].axhline(np.sqrt(signal_type1.amp[1]), color='black', linestyle='--')
-    # figs['X'].axes[1][1].plot(signal.t, np.mean(filtered_signal.X[1][:,1,:], axis=0), color='blue', linewidth=2)    
-    # figs['X'].axes[1][2].axhline(0, color='black', linestyle='--')
-    # figs['X'].axes[1][2].plot(signal.t, np.mean(filtered_signal.X[1][:,2,:], axis=0), color='blue', linewidth=2)
-    # figs['histogram'].axes[0][1].axhline(np.sqrt(signal_type1.amp[0]), color='black', linestyle='--')
-    # figs['histogram'].axes[0][2].axhline(np.sqrt(signal_type2.amp[0]), color='black', linestyle='--')
-    # figs['histogram'].axes[1][1].axhline(np.sqrt(signal_type1.amp[1]), color='black', linestyle='--')
-    # figs['histogram'].axes[1][2].axhline(0, color='black', linestyle='--')
+    fig_property = Struct(fontsize=fontsize, show=False, plot_signal=True, plot_X=True, particles_ratio=0.01,\
+                          plot_histogram=True, n_bins = 100, plot_c=False)
+    figs = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal).plot()
+    figs['X'].axes[0][1].axhline(np.sqrt(signal_type1.amp[0]), color='black', linestyle='--')
+    figs['X'].axes[0][1].plot(signal.t, np.mean(filtered_signal.X[0][:,1,:], axis=0), color='blue', linewidth=2)
+    figs['X'].axes[0][2].axhline(np.sqrt(signal_type2.amp[0]), color='black', linestyle='--')
+    figs['X'].axes[0][2].plot(signal.t, np.mean(filtered_signal.X[0][:,2,:], axis=0), color='blue', linewidth=2)
+    figs['X'].axes[1][1].axhline(np.sqrt(signal_type1.amp[1]), color='black', linestyle='--')
+    figs['X'].axes[1][1].plot(signal.t, np.mean(filtered_signal.X[1][:,1,:], axis=0), color='blue', linewidth=2)    
+    figs['X'].axes[1][2].axhline(0, color='black', linestyle='--')
+    figs['X'].axes[1][2].plot(signal.t, np.mean(filtered_signal.X[1][:,2,:], axis=0), color='blue', linewidth=2)
+    figs['histogram'].axes[0][1].axhline(np.sqrt(signal_type1.amp[0]), color='black', linestyle='--')
+    figs['histogram'].axes[0][2].axhline(np.sqrt(signal_type2.amp[0]), color='black', linestyle='--')
+    figs['histogram'].axes[1][1].axhline(np.sqrt(signal_type1.amp[1]), color='black', linestyle='--')
+    figs['histogram'].axes[1][2].axhline(0, color='black', linestyle='--')
     plt.show()
     # figs = set_yaxis(figs, cofpo.model)
 
