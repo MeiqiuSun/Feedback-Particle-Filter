@@ -8,6 +8,7 @@ from __future__ import division
 import numpy as np
 from scipy.linalg import solve_continuous_are as care
 import control
+import matplotlib.pyplot as plt
 
 from plotly import tools
 import plotly.offline as pyo
@@ -85,18 +86,23 @@ def bode_plot(mag, phase, omega):
     return fig
 
 if __name__ == "__main__":
-    A = [[1., 0],[-1, -2]]
-    B = [[1.],[2]]
-    C = [[1., 0]]
+    A = [[1]]
+    B = [[1.]]
+    C = [[1.]]
     R = [[0.1]]
-    Q = [[0.2, 0], [0, 0.2]]
+    Q = [[1]]
+    omega = np.logspace(-4, 4, 1000)
     sys_ss = steady_state_sys(A, B, C, R, Q)
-    # mag, phase, omega = control.bode(sys_ss, omega=np.logspace(-15, 4, 1000))
+    mag, phase, omega = control.bode(sys_ss, omega=omega, dB=True)
+    poles = control.pole(sys_ss)
     # fig = bode_plot(mag, phase, omega)
 
-    sys = control.ss2tf(A, B, C, np.array([[0]]))
-    mag, phase, omega = control.bode(sys_ss, omega=np.logspace(-15, 4, 1000))
-    fig = bode_plot(mag, phase, omega)
+    sys_ss = control.ss2tf(A, B, C, np.array([[0]]))
+    poles = control.pole(sys_ss)
+    # mag, phase, omega = control.bode(sys_ss, omega=omega, dB=True, deg=True)
+    # control.root_locus(sys_ss)
+    # plt.show()
+    # fig = bode_plot(mag, phase, omega)
 
 
 

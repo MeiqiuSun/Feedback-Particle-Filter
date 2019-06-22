@@ -13,24 +13,39 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
 
-from FPF import FPF
+from FPF import FPF, Model, Galerkin
 from Signal import Signal, Sinusoidal
 from Tool import Struct, isiterable, find_limits
 
-class Model(object):
-    def __init__(self, m, frequency_range):
-        self.d = 2*m+1
-        self.m = m
+class OscillatedModel(Model):
+    def __init__(self, frequency_range, amp_range, sigma_freq, sigma_amp, sigma_W):
+        d = 2*len(amp_range)+1
+        states = ['theta'] * d
+        states_label = [r'$\theta$'] * d
+        
         self.freq_min = frequency_range[0]
         self.freq_max = frequency_range[1]
-        self.states = ['theta'] * self.d
-        self.states_label = [r'$\theta$'] * self.d
-        for m in range(self.m):
-            self.states[2*m+1] = 'a{}'.format(m+1)
-            self.states[2*m+2] = 'b{}'.format(m+1)
-            self.states_label[2*m+1] = r'$a_{}$'.format(m+1)
-            self.states_label[2*m+2] = r'$b_{}$'.format(m+1)
+        X0_range = [[0,2*np.pi]] * d
+        sigma_V = [sigma_freq] * d
+        
+        for m in range(len(amp_range)):
+            states[2*m+1] = 'a{}'.format(m+1)
+            states[2*m+2] = 'b{}'.format(m+1)
+            states_label[2*m+1] = r'$a_{}$'.format(m+1)
+            states_label[2*m+2] = r'$b_{}$'.format(m+1)
+            X0_range[2*m+1] = amp_range[m]
+            X0_range[2*m+2] = amp_range[m]
+            sigma_V[2*m+1] = sigma_amp[m]
+            sigma_V[2*m+2] = sigma_amp[m]
+        
+        Model.__init__(self, m=len(amp_range), d=d, X0_range=X0_range, 
+                        states=states, states_label=states_label, 
+                        sigma_V=sigma_V, sigma_W=sigma_W)
     
+    def states_constraints(self, X):
+        X[:,0] = np.mod(X[:,0], 2*np.pi)
+        return X
+
     def f(self, X):
         dXdt = np.zeros(X.shape)
         dXdt[:,0] = np.linspace(self.freq_min*2*np.pi, self.freq_max*2*np.pi, X.shape[0])
@@ -40,7 +55,7 @@ class Model(object):
         Y = np.einsum('im,i->im', X[:,1::2], np.cos(X[:,0])) + np.einsum('im,i->im', X[:,2::2], np.sin(X[:,0]))
         return Y
 
-class Galerkin(object):
+class OscillatedGalerkin(Galerkin):
     """Galerkin approximation in finite element method:
             states: [ theta, a1, b1, a2, b2, ..., am, bm]
             base functions: [ a1*cos(theta), b1*sin(theta), ..., am*cos(theta), bm*sin(theta)] 
@@ -70,11 +85,9 @@ class Galerkin(object):
             grad_grad_psi(X): return a numpy array with the shape of (L,d,d,Np), gradient of gradient of base functions
     """
     def __init__(self, states, m):
-        self.d = len(states)
-        self.m = m
-        self.L = 2*self.m
+        Galerkin.__init__(self, states, m, 2*m)
         
-        self.states = ['self.'+state for state in states]
+        # self.states = ['self.'+state for state in states]
         self.result = ''
 
         self.psi_list = [None for l in range(self.L)]
@@ -124,10 +137,6 @@ class Galerkin(object):
             self.result = self.result.replace('sin','sympy.sin')
         return self.result
 
-    def split(self, X):
-        for d in range(self.d):
-            exec(self.states[d]+' = X[:,{}]'.format(d))
-
     def psi(self, X):
         self.split(X)
         exec("self.result = "+self.psi_string)
@@ -154,14 +163,25 @@ class Galerkin(object):
         return grad_grad_trial_functions
 
 class OFPF(FPF):
-    def __init__(self, number_of_particles, frequency_range, sigma_B, sigma_W, dt):
-        model = Model(len(sigma_W), frequency_range)
-        galerkin = Galerkin(model.states, model.m)
-        FPF.__init__(self, number_of_particles, model, galerkin, sigma_B, sigma_W, dt)
+    def __init__(self, number_of_particles, frequency_range, amp_range, sigma_amp, sigma_W, dt, sigma_freq=0):
+        assert len(amp_range)==len(sigma_amp)==len(sigma_W),  \
+            "length of amp_range ({}), length of sigma_amp ({}) and length of sigma_W ({}) do not match (should all be m)".format(
+                len(amp_range), len(sigma_amp), len(sigma_W))
+        model = OscillatedModel(frequency_range, amp_range, sigma_freq=sigma_freq, sigma_amp=sigma_amp, sigma_W=sigma_W)
+        galerkin = OscillatedGalerkin(model.states, model.m)
+        FPF.__init__(self, number_of_particles, model, galerkin, dt)
+    
+    def get_gain(self):
+        gain = np.zeros(self.m, dtype=complex)
+        for m in range(self.m):
+            # gain[m] = complex(am,-bm)
+            gain[m] = complex(np.mean(self.particles.X[:,2*m+1]),-np.mean(self.particles.X[:,2*m+2]))
+        return gain
 
 if __name__ == "__main__":
     # m = 2
     # model = Model(m,[1,2])
     # galerkin = Galerkin(model.states, m)
-    ofpf = OFPF(100, [1,2], [0.1], [0.1], 0.1)
+    ofpf = OFPF(100, [1,2], [[0,1],[1,2]], [0.1, 0.2], [0.1, 0.2], 0.1)
+    print(ofpf.get_gain())
     # print(galerkin.__dict__.keys())

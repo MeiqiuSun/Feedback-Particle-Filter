@@ -5,6 +5,8 @@ Created on Wed Jan. 23, 2019
 """
 
 from __future__ import division
+from abc import ABC, abstractmethod
+
 import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
@@ -12,171 +14,251 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
 
 from Signal import Signal, Sinusoidal
-from Tool import Particles, Struct, isiterable, find_limits
+from Tool import Struct, isiterable, find_limits
+
+
+class Particles(object):
+    """Particles:
+        Notation Note:
+            d: dimenstion of states
+        Initialize = Particles(number_of_particles, X0_range, states_constraints, m)
+            number_of_particles: integer, number of particles
+            X0_range: 2D list of float with length d-by-2, range of initial states
+            states_constraints: function, constraints on states
+            m: integer, number of outputs
+        Members =
+            Np: integer, number of particles
+            X: numpy array with the shape of (Np,d), the estimated states for Np particles
+            h: numpy array with the shape of (Np,m), the esitmated observations for Np particles
+            states_constraints: function, constraints on states
+        Methods =
+            update(): use states_constraints function to update states in all particles
+            get_X(): return X (if the dimenstion of states is 1, then the shape of returned array is (Np,), otherwise (Np, d))
+    """
+
+    def __init__(self, number_of_particles, X0_range, states_constraints, m):
+        self.Np = int(number_of_particles)
+        self.X = np.zeros([self.Np, len(X0_range)])
+        for d in range(len(X0_range)):
+            self.X[:,d] = np.linspace(X0_range[d][0], X0_range[d][1], self.Np)
+        self.h = np.zeros([self.Np, m])
+        self.states_constraints = states_constraints
+
+    def update(self, dX):
+        self.X = self.states_constraints(self.X+dX)
+        return 
+
+    def get_X(self):
+        return np.squeeze(self.X)
+
+class Model(ABC):
+    def __init__(self, m, d, X0_range, states, states_label, sigma_V, sigma_W):
+        self.m = int(m)
+        self.d = int(d)
+        self.X0_range = np.array(X0_range)
+        self.states = states
+        self.states_label = states_label
+        self.sigma_V = np.array(sigma_V)
+        self.sigma_W = np.array(sigma_W)
+    
+    @abstractmethod
+    def states_constraints(self, X):
+        return X
+    
+    @abstractmethod
+    def f(self, X):
+        dXdt = np.zeros(X.shape)
+        return dXdt
+
+    @abstractmethod
+    def h(self, X):
+        Y = np.zeros((X.shape[0], self.m))
+        return Y
+
+class Galerkin(ABC):
+    def __init__(self, states, m, L):
+        self.states = ['self.'+state for state in states]
+        self.d = len(states)
+        self.m = int(m)
+        self.L = int(L)
+        self.c = np.zeros((self.m, self.L))
+    
+    def split(self, X):
+        for d in range(self.d):
+            exec(self.states[d]+' = X[:,{}]'.format(d))
+
+    @abstractmethod
+    def psi(self, X):
+        raise NotImplementedError("Subclasses of Galerkin must set an instance method psi(self, X)")
+    
+    
+    @abstractmethod
+    def grad_psi(self, X):
+        raise NotImplementedError("Subclasses of Galerkin must set an instance method grad_psi(self, X)")
+
+    
+    @abstractmethod
+    def grad_grad_psi(self, X):
+        raise NotImplementedError("Subclasses of Galerkin must set an instance method grad_grad_psi(self, X)")    
+    
+    def calculate_K(self, X, normalized_dh):
+        """calculate the optimal feedback gain function K by using Galerkin Approximation to solve the BVP
+            Arguments = 
+                X: numpy array with the shape of (Np, d), the estimated states for Np particles
+                normalized_dh: numpy array with the shape of (Np,m), normalized filtered observation difference between each particle and mean
+            Variables = 
+                K: numpy array with the shape of (Np,d,m), gain for each particle
+                partial_K: numpy array with the shape of (Np,d,m,d), partial_K/partial_X for each particle
+                psi: numpy array with the shape of (L,Np), base functions psi
+                grad_psi: numpy array with the shape of (L,d,Np), gradient of base functions psi
+                grad_grad_psi: numpy array with the shape of (L,d,d,Np), gradient of gradient of base functions psi
+                A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
+                b: numpy array with the shape of (m,L), b = Exp[normalized_dh*psi] differ from channel to channel (m)
+                c: numpy array with the shape of (m,L), the solution to A*c=b
+        """
+        def calculate_A(self, grad_psi):
+            """calculate the A matrix in the Galerkin Approximation in Finite Element Method
+                Arguments = 
+                    grad_psi: numpy array with the shape of (L,d,Np), gradient of base functions psi
+                Variables =
+                    A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
+            """
+            A = np.zeros([self.L, self.L])
+            for li in range(self.L):
+                for lj in range(li, self.L):
+                    # A[li,lj] = np.sum(grad_psi[lj]*grad_psi[li])/self.particles.Np
+                    A[li,lj] = np.mean(np.sum(grad_psi[lj]*grad_psi[li], axis=0))
+                    if not li==lj:
+                        A[lj,li] = A[li,lj]
+            if np.linalg.det(A)==0:
+                A += np.diag(0.01*np.random.randn(self.galerkin.L))
+            # np.set_printoptions(precision=1)
+            # print(A)
+            return A
+        
+        def calculate_b(self, normalized_dh, psi):
+            """calculate the b vector in the Galerkin Approximation in Finite Element Method
+                Arguments = 
+                    normalized_dh: numpy array with the shape of (Np,), normalized mth channel of filtered observation difference between each particle and mean
+                    psi: numpy array with the shape of (L,Np), base functions psi
+                Variables = 
+                    b = numpy array with the shape of (L,), b = Exp[normalized_dh*psi]
+            """
+            b = np.zeros(self.L)
+            for l in range(self.L):
+                b[l] = np.mean(normalized_dh*psi[l])
+            return b
+        
+        K = np.zeros((X.shape[0], self.d, self.m))
+        partial_K = np.zeros((X.shape[0], self.d, self.m, self.d))
+        grad_psi = self.grad_psi(X)            
+        grad_grad_psi = self.grad_grad_psi(X)
+        A = calculate_A(self, grad_psi)
+        b = np.zeros((self.m, self.L))
+        for m in range(self.m):
+            b[m] = calculate_b(self, normalized_dh[:,m], self.psi(X))
+            self.c[m] = np.linalg.solve(A,b[m])
+            for l in range(self.L):
+                K[:,:,m] += self.c[m,l]*np.transpose(grad_psi[l])
+                partial_K[:,:,m,:] += self.c[m,l]*np.transpose(grad_grad_psi[l], (2,0,1))
+        return K, partial_K
 
 class FPF(object):
     """FPF: Feedback Partilce Filter
         Notation Note:
             Np: number of particles
-        Initialize = FPF(number_of_particles, model, galerkin, sigma_B, sigma_W, dt)
+        Initialize = FPF(number_of_particles, model, galerkin, dt)
             number_of_particles: integer, number of particles
-            model: class Model, f and h are defined at here
+            model: class Model, f, h and other paratemers are defined at here
             galerkin: class Galerkin, base functions are defined at here
-            sigma_B: 1D list of float with length N, standard deviations of process noise(X)
-            sigma_W: 1D list of float with legnth M, standard deviations of noise of observations(Y)
             dt: float, size of time step in sec
         Members =
-            sigma_B: numpy array with the shape of (N,), standard deviations of process noise(X)
-            sigma_W: numpy array with the shape of (M,), standard deviations of noise of observations(Y)
-            N: number of states(X)
-            M: number of observations(Y)
-            dt: float, size of time step in sec
-            particles: class Particles,
+            d: number of states(X)
+            m: number of observations(Y)
+            sigma_V: numpy array with the shape of (d,), standard deviations of process noise(X)
+            sigma_W: numpy array with the shape of (m,), standard deviations of noise of observations(Y)
             f: function, state dynamics
             h: function, estimated observation dynamics
+            dt: float, size of time step in sec
+            particles: class Particles,
             galerkin: class Galerkin, base functions are defined at here
-            h_hat: numpy array with the shape of (M,), filtered observations
+            c: numpy array with the shape of (m, L), 
+            h_hat: numpy array with the shape of (m,), filtered observations
         Methods =
             optimal_control(dZ, dI): calculate the optimal control with new observations(Y)
             calculate_h_hat(): Calculate h for each particle and h_hat by averaging h from all particles
             update(Y): Update each particle with new observations(Y)
             run(Y): Run FPF with time series observations(Y)
     """
-    def __init__(self, number_of_particles, model, galerkin, sigma_B, sigma_W, dt):
-        self.sigma_B = model.modified_sigma_B(np.array(sigma_B))
-        self.sigma_W = model.modified_sigma_W(np.array(sigma_W))
-        self.N = len(self.sigma_B)
-        self.M = len(self.sigma_W)
+    def __init__(self, number_of_particles, model, galerkin, dt):
+        self.d = model.d
+        self.m = model.m
+        self.sigma_V = model.sigma_V
+        self.sigma_W = model.sigma_W
+        self.f = model.f
+        self.h = model.h
         self.dt = dt
 
         self.particles = Particles(number_of_particles=number_of_particles, \
                                     X0_range=model.X0_range, states_constraints=model.states_constraints, \
-                                    M=self.M) 
-        self.f = model.f
-        self.h = model.h
+                                    m=self.m) 
         self.galerkin = galerkin
-        self.c = np.zeros([self.M, self.galerkin.L])
-        self.h_hat = np.zeros(self.M)
+        # self.c = np.zeros([self.m, self.galerkin.L])
+        self.h_hat = np.zeros(self.m)
     
     def optimal_control(self, dI, dZ):
         """calculate the optimal control with new observations(Y):
             Arguments = 
-                dI: numpy array with the shape of (Np,M), inovation process
+                dI: numpy array with the shape of (Np,m), inovation process
             Variables = 
-                K: numpy array with the shape of (Np,N,M), gain for each particle
-                partial_K: numpy array with the shape of (Np,N,M,N), partial_K/partial_X for each particle
+                K: numpy array with the shape of (Np,d,m), gain for each particle
+                partial_K: numpy array with the shape of (Np,d,m,d), partial_K/partial_X for each particle
         """
-
-        def calculate_K(self):
-            """calculate the optimal feedback gain function K by using Galerkin Approximation to solve the BVP
-                Variables = 
-                    K: numpy array with the shape of (Np,N,M), gain for each particle
-                    partial_K: numpy array with the shape of (Np,N,M,N), partial_K/partial_X for each particle
-                    psi: numpy array with the shape of (L,Np), base functions psi
-                    grad_psi: numpy array with the shape of (L,N,Np), gradient of base functions psi
-                    grad_grad_psi: numpy array with the shape of (L,N,N,Np), gradient of gradient of base functions psi
-                    A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
-                    b: numpy array with the shape of (M,L), b = Exp[normalized_dh*psi] differ from channel to channel (m)
-                    c: numpy array with the shape of (M,L), the solution to A*c=b
-            """
-            def calculate_A(self, grad_psi):
-                """calculate the A matrix in the Galerkin Approximation in Finite Element Method
-                    Arguments = 
-                        grad_psi: numpy array with the shape of (L,N,Np), gradient of base functions psi
-                    Variables =
-                        A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
-                """
-                A = np.zeros([self.galerkin.L, self.galerkin.L])
-                for li in range(self.galerkin.L):
-                    for lj in range(li, self.galerkin.L):
-                        # A[li,lj] = np.sum(grad_psi[lj]*grad_psi[li])/self.particles.Np
-                        A[li,lj] = np.mean(np.sum(grad_psi[lj]*grad_psi[li], axis=0))
-                        if not li==lj:
-                            A[lj,li] = A[li,lj]
-                if np.linalg.det(A)==0:
-                    A += np.diag(0.01*np.random.randn(self.galerkin.L))
-                # np.set_printoptions(precision=1)
-                # print(A)
-                return A
-            
-            def calculate_b(self, m, psi):
-                """calculate the b vector in the Galerkin Approximation in Finite Element Method
-                    Arguments = 
-                        m: int, mth of channel
-                        psi: numpy array with the shape of (L,Np), base functions psi
-                    Variables = 
-                        normalized_dh: numpy array with the shape of (Np,), normalized mth channel of filtered observation difference between each particle and mean
-                        b = numpy array with the shape of (L,), b = Exp[normalized_dh*psi]
-                """
-                normalized_dh = (self.particles.h[:,m]-self.h_hat[m])/np.square(self.sigma_W[m])
-                b = np.zeros(self.galerkin.L)
-                for li in range(self.galerkin.L):
-                    b[li] = np.mean(normalized_dh*psi[li])
-                return b
-            
-            K = np.zeros([self.particles.Np, self.N, self.M])
-            partial_K = np.zeros([self.particles.Np, self.N, self.M, self.N])
-            psi = self.galerkin.psi(X=self.particles.X)
-            grad_psi = self.galerkin.grad_psi(X=self.particles.X)            
-            grad_grad_psi = self.galerkin.grad_grad_psi(X=self.particles.X)
-            A = calculate_A(self, grad_psi)
-            b = np.zeros([self.M, self.galerkin.L])
-            c = np.zeros([self.M, self.galerkin.L])
-            for m in range(self.M):
-                b[m] = calculate_b(self, m, psi)
-                c[m] = np.linalg.solve(A,b[m])
-                for l in range(self.galerkin.L):
-                    K[:,:,m] += c[m,l]*np.transpose(grad_psi[l])
-                    partial_K[:,:,m,:] += c[m,l]*np.transpose(grad_grad_psi[l], (2,0,1))
-            self.c = c
-            return K, partial_K
-
-        K, partial_K = calculate_K(self)
+        K, partial_K = self.galerkin.calculate_K(self.particles.X, (self.particles.h-self.h_hat)/np.square(self.sigma_W))
         # return np.einsum('inm,m->in',K,dZ[0,:]) - np.einsum('inm,m->in',K,self.h_hat)*self.dt
-        return np.einsum('inm,im->in',K,dI) + 0.5*np.einsum('ijm,inmj->in',K,np.einsum('inmj,m->inmj',partial_K,np.square(self.sigma_W)))*self.dt
+        return np.einsum('idm,im->id',K,dI) + 0.5*np.einsum('ijm,idmj->id',K,np.einsum('idmj,m->idmj',partial_K,np.square(self.sigma_W)))*self.dt
     
     def calculate_h_hat(self):
         """Calculate h for each particle and h_hat by averaging h from all particles"""
-        self.particles.h = np.reshape(self.h(self.particles.X), [self.particles.Np, self.M])
+        self.particles.h = np.reshape(self.h(self.particles.X), [self.particles.Np, self.m])
         h_hat = np.mean(self.particles.h, axis=0)
         return h_hat
 
     def update(self, Y):
         """Update each particle with new observations(Y):
             argument =
-                Y: numpy array with the shape of (M,), new observation data at a fixed time
+                Y: numpy array with the shape of (m,), new observation data at a fixed time
             variables =
-                dZ: numpy array with the shape of ( 1,M), integral of y over time period dt
-                dI: numpy array with the shape of (Np,M), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
-                dX: numpy array with the shape of (Np,N), states increment for each particle
-                dU: numpy array with the shape of (Np,N), optimal control input for each particle
+                dZ: numpy array with the shape of ( 1,m), integral of y over time period dt
+                dI: numpy array with the shape of (Np,m), inovation process dI = dz-0.5*(h+h_hat)*dt for each particle
+                dX: numpy array with the shape of (Np,d), states increment for each particle
+                dU: numpy array with the shape of (Np,d), optimal control input for each particle
         """
         dZ = np.reshape(Y*self.dt, [1, Y.shape[0]])
         dI = dZ-0.5*(self.particles.h+self.h_hat)*self.dt
-        dX = self.f(self.particles.X)*self.dt + self.sigma_B*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
+        dX = self.f(self.particles.X)*self.dt + self.sigma_V*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
         dU = self.optimal_control(dI, dZ)
-        self.particles.X += dX+dU
+        self.particles.update(dX+dU)
         self.h_hat = self.calculate_h_hat()
-        self.particles.update()
         return dU
 
     def run(self, Y, show_time=False):
         """Run FPF with time series observations(Y):
             Arguments = 
-                Y: numpy array with the shape of (M,T/dt+1), observations in time series
+                Y: numpy array with the shape of (m,T/dt+1), observations in time series
             Variables = 
-                h_hat: numpy array with the shape of (M,T/dt+1), filtered observations in time series
-                X: numpy array with the shape of (N,T/dt+1), the states for N particles in time series
+                h_hat: numpy array with the shape of (m,T/dt+1), filtered observations in time series
+                X: numpy array with the shape of (d,T/dt+1), the states for Np particles in time series
             Return =
                 filtered_signal: Struct(h_hat, X), filtered observations with information of particles
         """
         h_hat = np.zeros(Y.shape)
         error = np.zeros(Y.shape)
-        h = np.zeros([self.particles.Np, self.M, Y.shape[1]])
-        X = np.zeros([self.particles.Np, self.N, Y.shape[1]])
-        dU = np.zeros([self.particles.Np, self.N, Y.shape[1]])
-        c = np.zeros([self.M, self.galerkin.L, Y.shape[1]]) 
-        X_mean = np.zeros([self.N, Y.shape[1]])
+        h = np.zeros([self.particles.Np, self.m, Y.shape[1]])
+        X = np.zeros([self.particles.Np, self.d, Y.shape[1]])
+        dU = np.zeros([self.particles.Np, self.d, Y.shape[1]])
+        c = np.zeros([self.m, self.galerkin.L, Y.shape[1]]) 
+        X_mean = np.zeros([self.d, Y.shape[1]])
         for k in range(Y.shape[1]):
             if show_time and np.mod(k,int(1/self.dt))==0:
                 print("===========time: {} [s]==============".format(int(k*self.dt)))
@@ -185,10 +267,10 @@ class FPF(object):
             h[:,:,k] = self.particles.h
             X[:,:,k] = self.particles.X
             X_mean[:,k] = np.mean(self.particles.X, axis=0)
-            c[:,:,k] = self.c
+            c[:,:,k] = self.galerkin.c
         # for m in range(y.shape[0]):
         #     L2_error[m,:] = np.sqrt(np.cumsum(np.square(y[m]-h_hat[m])*self.dt)/(self.dt*(y.shape[1]-1)))/self.sigma_W[m]
-        for m in range(Y.shape[0]):
+        for m in range(self.m):
             error[m,:] = Y[m,:]-h_hat[m,:]
         return Struct(h_hat=h_hat, L2_error=error, h=h, X=X, X_mean=X_mean, dU=dU, c=c)
 
@@ -352,21 +434,24 @@ class Figure(object):
 
         return axes
 
-class Model(object):
-    def __init__(self):
-        self.N = 2
-        self.M = 1
-        self.X0_range = [[1,2],[0,2*np.pi]]
-        self.min_sigma_B = 0.01
-        self.min_sigma_W = 0.1
+class Model1(Model):
+    def __init__(self, sigma_V, sigma_W):
+        self.freq_min=0.9
+        self.freq_max=1.1
+        self.sigma_V_min = 0.01
+        self.sigma_W_min = 0.1
+        Model.__init__(self, m=1, d=2, X0_range=[[1,2],[0,2*np.pi]], 
+                        states=['r','theta'], states_label=[r'$r$',r'$\theta$'], 
+                        sigma_V=self.modified_sigma_V(sigma_V), 
+                        sigma_W=self.modified_sigma_W(sigma_W))
 
-    def modified_sigma_B(self, sigma_B):
-        sigma_B = sigma_B.clip(min=self.min_sigma_B)
-        sigma_B[1::2] = 0
-        return sigma_B
+    def modified_sigma_V(self, sigma_V):
+        sigma_V = np.array(sigma_V).clip(min=self.sigma_V_min)
+        sigma_V[1::2] = 0
+        return sigma_V
     
     def modified_sigma_W(self, sigma_W):
-        sigma_W = sigma_W.clip(min=self.min_sigma_W)
+        sigma_W = np.array(sigma_W).clip(min=self.sigma_W_min)
         return sigma_W
 
     def states_constraints(self, X):
@@ -374,10 +459,8 @@ class Model(object):
         return X
 
     def f(self, X):
-        freq_min=0.9
-        freq_max=1.1
         dXdt = np.zeros(X.shape)
-        dXdt[:,1] = np.linspace(freq_min*2*np.pi, freq_max*2*np.pi, X.shape[0])
+        dXdt[:,1] = np.linspace(self.freq_min*2*np.pi, self.freq_max*2*np.pi, X.shape[0])
         return dXdt
 
     def h(self, X):
@@ -407,11 +490,11 @@ class Galerkin2(object):    # 2 states (r, theta) 2 base functions [1/2*r^2*cos(
                                       [  np.power(X[:,0],1)*np.cos(X[:,1]), -1/2*np.power(X[:,0],2)*np.sin(X[:,1])]]]
         return np.array(grad_grad_trial_functions)
 
-class Galerkin1(object):    # 2 states (r, theta) 2 base functions [r*cos(theta), r*sin(theta)]
+class Galerkin1(Galerkin):    # 2 states (r, theta) 2 base functions [r*cos(theta), r*sin(theta)]
     # Galerkin approximation in finite element method
-    def __init__(self):
+    def __init__(self, states, m):
         # L: int, number of trial (base) functions
-        self.L = 2       # trial (base) functions
+        Galerkin.__init__(self, states, m, L=2)
         
     def psi(self, X):
         trial_functions = [ np.power(X[:,0],1)*np.cos(X[:,1]), np.power(X[:,0],1)*np.sin(X[:,1])]
@@ -432,7 +515,7 @@ class Galerkin1(object):    # 2 states (r, theta) 2 base functions [r*cos(theta)
         return np.array(grad_grad_trial_functions)
         
 if __name__ == "__main__":
-
+    
     T = 10
     sampling_rate = 160 # Hz
     dt = 1./sampling_rate
@@ -440,7 +523,9 @@ if __name__ == "__main__":
     signal = Signal(signal_type=signal_type, T=T)
     
     Np = 1000
-    feedback_particle_filter = FPF(number_of_particles=Np, model=Model(), galerkin=Galerkin1(), sigma_B=signal_type.sigma_B, sigma_W=signal_type.sigma_W, dt=signal_type.dt)
+    model = Model1(sigma_V=signal_type.sigma_V, sigma_W=signal_type.sigma_W)
+    feedback_particle_filter = FPF(number_of_particles=Np, 
+                                    model=model, galerkin=Galerkin1(model.states, model.m), dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
