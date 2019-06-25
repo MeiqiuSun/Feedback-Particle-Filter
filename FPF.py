@@ -130,8 +130,9 @@ class Galerkin(ABC):
                     A[li,lj] = np.mean(np.sum(grad_psi[lj]*grad_psi[li], axis=0))
                     if not li==lj:
                         A[lj,li] = A[li,lj]
-            if np.linalg.det(A)==0:
-                A += np.diag(0.01*np.random.randn(self.galerkin.L))
+            # print(np.linalg.det(A))
+            if np.linalg.det(A)<=0.01:
+                A += np.diag(0.01*np.random.randn(self.L))
             # np.set_printoptions(precision=1)
             # print(A)
             return A

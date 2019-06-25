@@ -74,6 +74,20 @@ class Signal(object):
             self.dZ = None
             self.Y = None
     
+    @classmethod
+    def create(cls, t, *args):
+        signal = Signal()
+        signal.t = t
+        m = 0
+        for arg in args:
+            m += arg.shape[0]
+        signal.Y = np.zeros((m, args[0].shape[1]))
+        temp_m = 0
+        for arg in args:
+            signal.Y[temp_m:temp_m+arg.shape[0],:] = arg
+            temp_m += arg.shape[0]
+        return signal
+
     def __add__(self, other):
         assert self.dt==other.dt, "time scales (dt) are different"
         assert self.T==other.T, "time length (T) are different"
@@ -133,6 +147,38 @@ class Linear(object):
         H = np.array([[1,0],\
                       [0,1]])
         return np.matmul(H,X)
+
+class LTI(object):
+    def __init__(self, A, B, C, D, sigma_V, sigma_W, dt):
+        self.A = np.array(A)
+        self.B = np.array(B)
+        self.C = np.array(C)
+        self.D = np.array(D)
+        self.sigma_V = np.array(sigma_V)
+        self.sigma_W = np.array(sigma_W)
+        self.dt = dt
+
+    def f(self, X, U):
+        return np.matmul(self.A, X) + np.matmul(self.B, U)
+    
+    def h(self, X, U):
+        return np.matmul(self.C, X) + np.matmul(self.D, U)
+
+    def update(self, Xk, U):
+        dZ = self.h(Xk, U) * self.dt + self.sigma_W*np.random.normal(0, np.sqrt(self.dt), size=self.sigma_W.shape[0])
+        dX = self.f(Xk, U) * self.dt + self.sigma_V*np.random.normal(0, np.sqrt(self.dt), size=self.sigma_V.shape[0])
+        return dZ/self.dt, dX
+
+    def run(self, X0, U):
+        X = np.zeros((self.sigma_V.shape[0], U.shape[1]))
+        Y = np.zeros((self.sigma_W.shape[0], U.shape[1]))
+        Xk = np.array(X0)
+        for k in range(U.shape[1]):
+            X[:,k] = Xk
+            Y[:,k], dX = self.update(Xk, U[:,k])
+            Xk += dX
+        return Y, X
+
 
 class Sinusoidal(object):
     def __init__(self, dt):

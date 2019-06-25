@@ -15,6 +15,7 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 import plotly.io as pio
 
+from Tool import Struct
 
 # class KF(object):
 #     def __init__(self, model, sigma_B, sigma_W, dt):
@@ -43,19 +44,25 @@ def steady_state_sys(A, B, C, R, Q):
     sys_ss = control.ss2tf(A_extend, B_extend, C_extend, D_extend)
     return sys_ss
 
-def bode_plot(mag, phase, omega):
-    mag_trace = go.Scatter(
-        x = omega,
-        y = mag,
-        yaxis = 'y1'
-    )
+def bode_data(omega, mag, phase):
+    return Struct(omega=omega, mag=mag, phase=phase)
 
-    phase_trace = go.Scatter(
-        x = omega,
-        y = phase,
-        yaxis = 'y2'
-    )
-    data = [mag_trace, phase_trace]
+def bode_plot(*args):
+    data =[None] * (2*len(args))
+    for i, arg in enumerate(args):
+        mag_trace = go.Scatter(
+            x = arg.omega,
+            y = arg.mag,
+            yaxis = 'y1'
+        )
+
+        phase_trace = go.Scatter(
+            x = arg.omega,
+            y = arg.phase,
+            yaxis = 'y2'
+        )
+        data[2*i] = mag_trace
+        data[2*i+1] = phase_trace
 
     layout = go.Layout(
         title = 'Bode Diagram',
@@ -64,7 +71,7 @@ def bode_plot(mag, phase, omega):
             type = 'log'
         ),
         yaxis=dict(
-            title = 'Magnitude [dB]',
+            title = 'Magnitude',
             domain = [0.5,1],
             anchor = 'y1'
         ),
@@ -86,24 +93,38 @@ def bode_plot(mag, phase, omega):
     return fig
 
 if __name__ == "__main__":
-    A = [[1]]
+    A = [[-1]]
     B = [[1.]]
     C = [[1.]]
     R = [[0.1]]
     Q = [[1]]
     omega = np.logspace(-4, 4, 1000)
     sys_ss = steady_state_sys(A, B, C, R, Q)
+    dt = 0.01
+    T = 10
+    t = np.arange(0, T+dt, dt)
+    f = 1/(2*np.pi)
+    U = np.reshape(np.cos(2.*np.pi*f*t), (-1,t.shape[0]))
+    X0=[[1.]]
+    t, Y, X = control.forced_response(sys_ss, T=t, U=U, X0=X0)
+
     mag, phase, omega = control.bode(sys_ss, omega=omega, dB=True)
     poles = control.pole(sys_ss)
-    # fig = bode_plot(mag, phase, omega)
+    KF_bode = bode_data(omega, mag, phase)
+    omega, mag, phase  = np.loadtxt('bode.txt', unpack=True)
+    OFPF_bode = bode_data(omega, mag, phase)
 
-    sys_ss = control.ss2tf(A, B, C, np.array([[0]]))
-    poles = control.pole(sys_ss)
+    fig = bode_plot(KF_bode, OFPF_bode)
+    plt.figure()
+    plt.plot(t, U[0,:])
+    plt.plot(t, Y)
+
+    # sys_ss = control.ss2tf(A, B, C, np.array([[0]]))
+    # poles = control.pole(sys_ss)
     # mag, phase, omega = control.bode(sys_ss, omega=omega, dB=True, deg=True)
     # control.root_locus(sys_ss)
-    # plt.show()
     # fig = bode_plot(mag, phase, omega)
-
+    plt.show()
 
 
 

@@ -39,19 +39,22 @@ def find_limits(signals, scale='normal'):
     return minimum, maximum
 
 if __name__ == "__main__":
-    amp_ranges=[[0,1],[0,2],[0,3],[0,4]]
-    sigma_B=[[0, 1, 2, 3, 4]]
-    print(amp_ranges)
-    print(sigma_B)
-    sigma_B = np.array(sigma_B)
-    print(sigma_B, type(sigma_B))
-    sigma_B = np.array(sigma_B)
-    print(sigma_B, type(sigma_B))
+    # amp_ranges=[[0,1],[0,2],[0,3],[0,4]]
+    # sigma_B=[[0, 1, 2, 3, 4]]
+    # print(amp_ranges)
+    # print(sigma_B)
+    # sigma_B = np.array(sigma_B)
+    # print(sigma_B, type(sigma_B))
+    # sigma_B = np.array(sigma_B)
+    # print(sigma_B, type(sigma_B))
     # known_observations = [2,3]
     # amp_ranges = [amp_ranges[m-1] for m in known_observations]
     # known_observations.insert(0,0)
     # sigma_B = [sigma_B[m] for m in known_observations]
     # print(amp_ranges)
     # print(sigma_B)
+
+    array = np.loadtxt('bode.txt')
+    np.savetxt('bode.txt', np.transpose(array))
     pass
     
