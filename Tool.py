@@ -6,6 +6,11 @@ Created on Fri Feb. 15, 2019
 
 import numpy as np
 
+from plotly import tools
+import plotly.offline as pyo
+import plotly.graph_objs as go
+import plotly.io as pio
+
 class Struct(dict):
     """create a struct"""
     def __init__(self, **kwds):
@@ -38,7 +43,106 @@ def find_limits(signals, scale='normal'):
         maximum = np.max(maximums)+signal_range/10
     return minimum, maximum
 
+class BodeDiagram(object):
+
+    default_colors = [
+        '#1f77b4',  # muted blue
+        '#ff7f0e',  # safety orange
+        '#2ca02c',  # cooked asparagus green
+        '#d62728',  # brick red
+        '#9467bd',  # muted purple
+        '#8c564b',  # chestnut brown
+        '#e377c2',  # raspberry yogurt pink
+        '#7f7f7f',  # middle gray
+        '#bcbd22',  # curry yellow-green
+        '#17becf'   # blue-teal
+        ]
+    
+    def __init__(self, bodes, Hz=False, dB=False, deg=False, filename='bode_diagram'):
+        self.bodes = bodes
+        for bode in self.bodes:
+            if not (bode.Hz == Hz):
+                bode.frequency *= (2*np.pi) if bode.Hz else 1/(2*np.pi)
+            if not (bode.deg == deg):
+                bode.phase *= (2*np.pi)/360 if bode.deg else 360/(2*np.pi)
+            if not (bode.dB == dB):
+                bode.magnitude = np.power(10,bode.magnitude/20) if bode.dB else 20*np.log10(bode.magnitude)
+        self.frequency_label = 'Frequency ' + ( '[Hz]' if Hz else '[rad/s]')
+        self.magnitude_label = 'Magnitude' + ( ' [dB]' if dB else '')
+        self.phase_label = 'Phase ' + ( '[deg]' if deg else '[rad]')
+        self.filename = filename if '.html' in filename else filename+'.html'
+
+    def plot(self, fontsize=15):
+        data = [None] * (2*len(self.bodes))
+        for i, bode in enumerate(self.bodes):
+            style = dict(
+                name = bode.name,
+                legendgroup = bode.name,
+                line = dict(color = self.default_colors[np.mod(i,len(self.default_colors))])
+            )
+
+            magnitude_trace = go.Scatter(
+                x = bode.frequency,
+                y = bode.magnitude,
+                yaxis = 'y2',
+                **style
+            )
+
+            phase_trace = go.Scatter(
+                x = bode.frequency,
+                y = bode.phase,
+                yaxis = 'y1',
+                showlegend=False,
+                **style
+            )
+
+            data[2*i] = magnitude_trace
+            data[2*i+1] = phase_trace
+
+        layout = go.Layout(
+            title = 'Bode Diagram',
+            font = dict(size=fontsize),
+            xaxis = dict(
+                title = self.frequency_label,
+                type = 'log'
+            ),
+            yaxis1=dict(
+                title = self.phase_label,
+                # range = [-np.pi-0.1, 0.1],
+                # tick0 = -np.pi,
+                # dtick = np.pi/4,
+                domain = [0,0.5],
+                anchor = 'y1'
+            ),
+            yaxis2 = dict(
+                scaleanchor = "x",
+                title = self.magnitude_label,
+                domain = [0.5,1],
+                anchor = 'y2'
+            )
+        )
+
+        fig = go.Figure(data=data, layout=layout)
+        pyo.plot(fig, filename=self.filename)
+        return fig
+    
+    @staticmethod
+    def load_bode_file(filename, name=''):
+        filename = filename if '.txt' in filename else filename+'.txt'
+        name = filename.replace('.txt','') if name=='' else name
+        frequency, magnitude, phase  = np.loadtxt(filename, unpack=True)
+        return Struct(name=name, frequency=frequency, magnitude=magnitude, phase=phase, Hz=False, dB=False, deg=False)
+
+    @staticmethod
+    def create_bode_data(name, frequency, magnitude, phase, Hz=False, dB=False, deg=False):
+        return Struct(name=name, frequency=frequency, magnitude=magnitude, phase=phase, Hz=Hz, dB=dB, deg=deg)
+
 if __name__ == "__main__":
+    # bode1 = BodeDiagram.load_bode_file('bode_f_band_noiseless.txt')
+    # bode2 = BodeDiagram.load_bode_file('bode_f_fix_noiseless.txt')
+    # bodeDiagram = BodeDiagram([bode1, bode2], dB=True, Hz=False)
+    # bodeDiagram.plot()
+    # print(bodeDiagram.frequency_label)
     # amp_ranges=[[0,1],[0,2],[0,3],[0,4]]
     # sigma_B=[[0, 1, 2, 3, 4]]
     # print(amp_ranges)
@@ -54,7 +158,18 @@ if __name__ == "__main__":
     # print(amp_ranges)
     # print(sigma_B)
 
-    array = np.loadtxt('bode.txt')
-    np.savetxt('bode.txt', np.transpose(array))
+    array = np.loadtxt('bode1.txt')
+    array[array<-np.pi] += 2*np.pi 
+    np.savetxt('bode1.txt', array)
+    # fig_property = Struct(plot_signal=True, plot_X=False)
+
+    # if ('plot_signal' in fig_property.__dict__) and fig_property.plot_signal:
+    #     print('plot_signal')
+        
+    # if ('plot_X' in fig_property.__dict__) and fig_property.plot_X:
+    #     print('plot_X')
+        
+    # if ('plot_histogram' in fig_property.__dict__) and fig_property.plot_histogram:
+    #     print('plot_histogram')
     pass
     

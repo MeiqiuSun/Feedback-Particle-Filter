@@ -15,7 +15,7 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 import plotly.io as pio
 
-from Tool import Struct
+from Tool import Struct, BodeDiagram
 
 # class KF(object):
 #     def __init__(self, model, sigma_B, sigma_W, dt):
@@ -44,53 +44,6 @@ def steady_state_sys(A, B, C, R, Q):
     sys_ss = control.ss2tf(A_extend, B_extend, C_extend, D_extend)
     return sys_ss
 
-def bode_data(omega, mag, phase):
-    return Struct(omega=omega, mag=mag, phase=phase)
-
-def bode_plot(*args):
-    data =[None] * (2*len(args))
-    for i, arg in enumerate(args):
-        mag_trace = go.Scatter(
-            x = arg.omega,
-            y = arg.mag,
-            yaxis = 'y1'
-        )
-
-        phase_trace = go.Scatter(
-            x = arg.omega,
-            y = arg.phase,
-            yaxis = 'y2'
-        )
-        data[2*i] = mag_trace
-        data[2*i+1] = phase_trace
-
-    layout = go.Layout(
-        title = 'Bode Diagram',
-        xaxis=dict(
-            title = 'Frequency [rad/s]',
-            type = 'log'
-        ),
-        yaxis=dict(
-            title = 'Magnitude',
-            domain = [0.5,1],
-            anchor = 'y1'
-        ),
-        yaxis2=dict(
-            title = 'Phase [rad]',
-            range = [-np.pi-0.1, 0.1],
-            tick0 = -np.pi,
-            dtick = np.pi/4,
-            domain = [0,0.5],
-            anchor = 'y2'
-        )
-    )
-    # fig = tools.make_subplots(rows=2, cols=1)
-    # fig.append_trace(mag_trace, 1, 1)
-    # fig.append_trace(phase_trace, 2, 1)
-    # fig['layout'].update(height=600, width=600, title='Stacked subplots')
-    fig = go.Figure(data=data, layout=layout)
-    pyo.plot(fig, filename='bode_diagram')
-    return fig
 
 if __name__ == "__main__":
     A = [[-1]]
@@ -98,7 +51,7 @@ if __name__ == "__main__":
     C = [[1.]]
     R = [[0.1]]
     Q = [[1]]
-    omega = np.logspace(-4, 4, 1000)
+    omega = np.logspace(-4, 4, 801)
     sys_ss = steady_state_sys(A, B, C, R, Q)
     dt = 0.01
     T = 10
@@ -108,24 +61,30 @@ if __name__ == "__main__":
     X0=[[1.]]
     t, Y, X = control.forced_response(sys_ss, T=t, U=U, X0=X0)
 
-    mag, phase, omega = control.bode(sys_ss, omega=omega, dB=True)
-    poles = control.pole(sys_ss)
-    KF_bode = bode_data(omega, mag, phase)
-    omega, mag, phase  = np.loadtxt('bode.txt', unpack=True)
-    OFPF_bode = bode_data(omega, mag, phase)
-
-    fig = bode_plot(KF_bode, OFPF_bode)
-    plt.figure()
-    plt.plot(t, U[0,:])
-    plt.plot(t, Y)
-
-    # sys_ss = control.ss2tf(A, B, C, np.array([[0]]))
+    mag, phase, omega = control.bode(sys_ss, omega=np.around(omega, decimals=4), dB=True)
     # poles = control.pole(sys_ss)
-    # mag, phase, omega = control.bode(sys_ss, omega=omega, dB=True, deg=True)
-    # control.root_locus(sys_ss)
-    # fig = bode_plot(mag, phase, omega)
-    plt.show()
 
+    KF_bode = BodeDiagram.create_bode_data(name='KF', frequency=omega, magnitude=mag, phase=phase)
+    # OFPF_bode = BodeDiagram.load_bode_file('bode.txt')
+    OFPF_bode_tail = BodeDiagram.load_bode_file('bode_tail.txt')
+    OFPF_bode_tail2 = BodeDiagram.load_bode_file('bode_tail2.txt')
+    OFPF_f_band_bode = BodeDiagram.load_bode_file('bode_f_band_noiseless.txt')
+    OFPF_f_fix_noise_bode = BodeDiagram.load_bode_file('bode_f_fix_noise.txt')
+    OFPF_f_fix_noiseless_bode = BodeDiagram.load_bode_file('bode_f_fix_noiseless.txt')
+    OFPF_bode21 = BodeDiagram.load_bode_file('bode21.txt')
+    OFPF_bode22 = BodeDiagram.load_bode_file('bode22.txt')
+    OFPF_bode31 = BodeDiagram.load_bode_file('bode31.txt')
+    OFPF_bode32 = BodeDiagram.load_bode_file('bode32.txt')
+    OFPF_bode33 = BodeDiagram.load_bode_file('bode33.txt')
+    # OFPF_bode3 = BodeDiagram.load_bode_file('bode3.txt')
+    # OFPF_bode21 = BodeDiagram.load_bode_file('bode_2_f_band_noiseless_1.txt')
+    # OFPF_bode22 = BodeDiagram.load_bode_file('bode_2_f_band_noiseless_2.txt')
+    # OFPF_bode31 = BodeDiagram.load_bode_file('bode_3_f_band_noiseless_1.txt')
+    # OFPF_bode32 = BodeDiagram.load_bode_file('bode_3_f_band_noiseless_2.txt')
+    # OFPF_bode33 = BodeDiagram.load_bode_file('bode_3_f_band_noiseless_3.txt')
+    bodeDiagram = BodeDiagram([KF_bode, OFPF_bode_tail, OFPF_f_fix_noise_bode, OFPF_bode_tail2, OFPF_bode21, OFPF_bode22, OFPF_bode31, OFPF_bode32, OFPF_bode33], dB=False)
+    bodeDiagram.plot()
+  
 
 
 

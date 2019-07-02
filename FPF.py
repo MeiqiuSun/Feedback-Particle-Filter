@@ -204,7 +204,6 @@ class FPF(object):
                                     X0_range=model.X0_range, states_constraints=model.states_constraints, \
                                     m=self.m) 
         self.galerkin = galerkin
-        # self.c = np.zeros([self.m, self.galerkin.L])
         self.h_hat = np.zeros(self.m)
     
     def optimal_control(self, dI, dZ):
@@ -272,8 +271,8 @@ class FPF(object):
         # for m in range(y.shape[0]):
         #     L2_error[m,:] = np.sqrt(np.cumsum(np.square(y[m]-h_hat[m])*self.dt)/(self.dt*(y.shape[1]-1)))/self.sigma_W[m]
         for m in range(self.m):
-            error[m,:] = Y[m,:]-h_hat[m,:]
-        return Struct(h_hat=h_hat, L2_error=error, h=h, X=X, X_mean=X_mean, dU=dU, c=c)
+            error[m,:] = h_hat[m,:]-Y[m,:]
+        return Struct(h_hat=h_hat, error=error, h=h, X=X, X_mean=X_mean, dU=dU, c=c)
 
 class Figure(object):
     """Figure: Figures for Feedback Partilce Filter
@@ -298,12 +297,14 @@ class Figure(object):
     
     def plot(self):
 
-        if self.fig_property.plot_signal:
+        if ('plot_signal' in self.fig_property.__dict__) and self.fig_property:
+            print("plot_signal")
             for m in range(self.signal.Y.shape[0]):
                 fig = plt.figure(figsize=(8,8))
-                ax2 = plt.subplot2grid((4,1),(3,0))
-                ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3, sharex=ax2)
+                ax2 = plt.subplot2grid(shape=(4,1),loc=(3,0))
+                ax1 = plt.subplot2grid(shape=(4,1),loc=(0,0), rowspan=3, sharex=ax2)
                 axes = self.plot_signal([ax1, ax2], m)
+                ax2.axhline(y=0, color='gray', linestyle='--')
                 plt.setp(ax1.get_xticklabels(), visible=False)
                 fig.add_subplot(111, frameon=False)
                 plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
@@ -311,7 +312,8 @@ class Figure(object):
                 plt.title('m={}'.format(m+1), fontsize=self.fig_property.fontsize+2)
                 self.figs['signal_{}'.format(m+1)] = Struct(fig=fig, axes=axes)
 
-        if self.fig_property.plot_X:
+        if ('plot_X' in self.fig_property.__dict__) and self.fig_property.plot_X:
+            print("plot_X")
             nrow = self.filtered_signal.X.shape[1]
             fig, axes = plt.subplots(nrow, 1, figsize=(8,4*nrow+4), sharex=True)
             axes = [axes] if nrow==1 else axes
@@ -321,7 +323,8 @@ class Figure(object):
             plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
             self.figs['X'] = Struct(fig=fig, axes=axes)
 
-        if self.fig_property.plot_histogram:
+        if ('plot_histogram' in self.fig_property.__dict__) and self.fig_property.plot_histogram:
+            print("plot_histogram")
             nrow = self.filtered_signal.X.shape[1]
             fig, axes = plt.subplots(nrow ,1, figsize=(8,4*nrow+4), sharex=True)
             axes = [axes] if nrow==1 else axes
@@ -331,7 +334,8 @@ class Figure(object):
             plt.xlabel('\nhistogram [%]', fontsize=self.fig_property.fontsize)
             self.figs['histogram'] = Struct(fig=fig, axes=axes)
         
-        if self.fig_property.plot_c:
+        if ('plot_c' in self.fig_property.__dict__) and self.fig_property.plot_c:
+            print("plot_c")
             for m in range(self.signal.Y.shape[0]):
                 nrow = self.filtered_signal.c.shape[1]
                 fig, axes = plt.subplots(nrow, 1, figsize=(8,4*nrow+4), sharex=True)
@@ -352,9 +356,9 @@ class Figure(object):
         axes[0].tick_params(labelsize=self.fig_property.fontsize)
         axes[0].set_ylim(find_limits(self.signal.Y))
         
-        axes[1].plot(self.signal.t,self.filtered_signal.L2_error[m], color='magenta')
+        axes[1].plot(self.signal.t,self.filtered_signal.error[m], color='magenta')
         axes[1].tick_params(labelsize=self.fig_property.fontsize)
-        axes[1].set_ylim(find_limits(self.filtered_signal.L2_error[m]))
+        axes[1].set_ylim(find_limits(self.filtered_signal.error[m]))
         # axes[1].set_ylabel('$L_2$ error', fontsize=self.fig_property.fontsize)
         axes[1].set_ylabel('error', fontsize=self.fig_property.fontsize)
         return axes
@@ -525,8 +529,8 @@ if __name__ == "__main__":
     
     Np = 1000
     model = Model1(sigma_V=signal_type.sigma_V, sigma_W=signal_type.sigma_W)
-    feedback_particle_filter = FPF(number_of_particles=Np, 
-                                    model=model, galerkin=Galerkin1(model.states, model.m), dt=signal_type.dt)
+    galerkin = Galerkin1(model.states, model.m)
+    feedback_particle_filter = FPF(number_of_particles=Np, model=model, galerkin=galerkin, dt=signal_type.dt)
     filtered_signal = feedback_particle_filter.run(signal.Y)
 
     fontsize = 20
