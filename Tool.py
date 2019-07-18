@@ -4,18 +4,20 @@ Created on Fri Feb. 15, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
+from __future__ import division
+
 import numpy as np
+import bisect
 
 from plotly import tools
 import plotly.offline as pyo
 import plotly.graph_objs as go
-import plotly.io as pio
 
 class Struct(dict):
     """create a struct"""
-    def __init__(self, **kwds):
-        dict.__init__(self, kwds)
-        self.__dict__.update(kwds)
+    def __init__(self, **kwargs):
+        dict.__init__(self, kwargs)
+        self.__dict__.update(kwargs)
 
 def isiterable(object):
     """check if object is iterable"""
@@ -42,6 +44,15 @@ def find_limits(signals, scale='normal'):
         minimum = np.min(minimums)-signal_range/10
         maximum = np.max(maximums)+signal_range/10
     return minimum, maximum
+
+def find_closest(num, seq, pos=False):
+    index = bisect.bisect_left(a=seq, x=num)
+    if index == len(seq):
+        raise ValueError
+    if pos:
+        return index
+    else :
+        return seq[index]
 
 class BodeDiagram(object):
 
@@ -158,9 +169,9 @@ if __name__ == "__main__":
     # print(amp_ranges)
     # print(sigma_B)
 
-    array = np.loadtxt('bode1.txt')
-    array[array<-np.pi] += 2*np.pi 
-    np.savetxt('bode1.txt', array)
+    # array = np.loadtxt('bode1.txt')
+    # array[array<-np.pi] += 2*np.pi 
+    # np.savetxt('bode1.txt', array)
     # fig_property = Struct(plot_signal=True, plot_X=False)
 
     # if ('plot_signal' in fig_property.__dict__) and fig_property.plot_signal:
@@ -171,5 +182,30 @@ if __name__ == "__main__":
         
     # if ('plot_histogram' in fig_property.__dict__) and fig_property.plot_histogram:
     #     print('plot_histogram')
+    # trace1 = go.Scatter(
+    #     x=[0, 1, 2],
+    #     y=[10, 11, 12]
+    # )
+    # trace2 = go.Scatter(
+    #     x=[2, 3, 4],
+    #     y=[100, 110, 120],
+    # )
+    # trace3 = go.Scatter(
+    #     x=[3, 4, 5],
+    #     y=[100, 1100, 1200],
+    # )
+    # fig = tools.make_subplots(rows=3, cols=1, specs=[[{}], [{}], [{}]],
+    #                         shared_xaxes=True, shared_yaxes=True,
+    #                         vertical_spacing=0.1)
+    # fig.append_trace(trace1, 3, 1)
+    # fig.append_trace(trace2, 2, 1)
+    # fig.append_trace(trace3, 1, 1)
+
+    # fig['layout'].update(height=600, width=600, title='Stacked Subplots with Shared X-Axes')
+    # pyo.plot(fig, filename='stacked-subplots-shared-xaxes')
+    if []:
+        print(True)
+    else:
+        print(False)
     pass
     

@@ -8,13 +8,13 @@ from __future__ import division
 from abc import ABC, abstractmethod
 
 import numpy as np
-import matplotlib
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
-from matplotlib.ticker import PercentFormatter
 
-from Signal import Signal, Sinusoidal
-from Tool import Struct, isiterable, find_limits
+from plotly import tools
+import plotly.offline as pyo
+import plotly.graph_objs as go
+
+from Tool import Struct, isiterable, find_limits, find_closest
+from Signal import Signal, Sinusoidals
 
 
 class Particles(object):
@@ -192,6 +192,7 @@ class FPF(object):
             run(Y): Run FPF with time series observations(Y)
     """
     def __init__(self, number_of_particles, model, galerkin, dt):
+        self.states_label = model.states_label
         self.d = model.d
         self.m = model.m
         self.sigma_V = model.sigma_V
@@ -253,206 +254,255 @@ class FPF(object):
                 filtered_signal: Struct(h_hat, X), filtered observations with information of particles
         """
         h_hat = np.zeros(Y.shape)
-        error = np.zeros(Y.shape)
         h = np.zeros([self.particles.Np, self.m, Y.shape[1]])
         X = np.zeros([self.particles.Np, self.d, Y.shape[1]])
         dU = np.zeros([self.particles.Np, self.d, Y.shape[1]])
-        c = np.zeros([self.m, self.galerkin.L, Y.shape[1]]) 
-        X_mean = np.zeros([self.d, Y.shape[1]])
+        c = np.zeros([self.m, self.galerkin.L, Y.shape[1]])
         for k in range(Y.shape[1]):
             if show_time and np.mod(k,int(1/self.dt))==0:
                 print("===========time: {} [s]==============".format(int(k*self.dt)))
-            dU[:,:,k] = self.update(Y[:,k])
+            
             h_hat[:,k] = self.h_hat
             h[:,:,k] = self.particles.h
             X[:,:,k] = self.particles.X
-            X_mean[:,k] = np.mean(self.particles.X, axis=0)
+            dU[:,:,k] = self.update(Y[:,k])
             c[:,:,k] = self.galerkin.c
-        # for m in range(y.shape[0]):
-        #     L2_error[m,:] = np.sqrt(np.cumsum(np.square(y[m]-h_hat[m])*self.dt)/(self.dt*(y.shape[1]-1)))/self.sigma_W[m]
-        for m in range(self.m):
-            error[m,:] = h_hat[m,:]-Y[m,:]
-        return Struct(h_hat=h_hat, error=error, h=h, X=X, X_mean=X_mean, dU=dU, c=c)
+
+        return Struct(states_label=self.states_label, h_hat=h_hat, h=h, X=X, c=c)
 
 class Figure(object):
-    """Figure: Figures for Feedback Partilce Filter
-        Initialize = Figure(fig_property, signal, filtered_signal)
-            fig_property: Sturct, properties for figures and plot flags
-            signal: Signal, observations
-            filtered_signal: Struct, filtered observations with information of particles
-        Members = 
-            fig_property: Sturct, properties for figures and plot flags
-            signal: Signal, observations
-            filtered_signal: Struct, filtered observations with information of particles
-        Methods =
-            plot(): plot figures
-            plot_signal(axes, m): plot a figure with observations and filtered observations together, each of axes represents a time series of observation
-            
-    """
+
+    default_colors = [
+        '#1f77b4',  # muted blue
+        '#ff7f0e',  # safety orange
+        '#2ca02c',  # cooked asparagus green
+        '#d62728',  # brick red
+        '#9467bd',  # muted purple
+        '#8c564b',  # chestnut brown
+        '#e377c2',  # raspberry yogurt pink
+        '#7f7f7f',  # middle gray
+        '#bcbd22',  # curry yellow-green
+        '#17becf'   # blue-teal
+        ]
+
     def __init__(self, fig_property, signal, filtered_signal):
         self.fig_property = fig_property
         self.signal = signal
         self.filtered_signal = filtered_signal
-        self.figs = {'fontsize':self.fig_property.fontsize}
-    
-    def plot(self):
+        self.figs = dict()
 
-        if ('plot_signal' in self.fig_property.__dict__) and self.fig_property:
-            print("plot_signal")
-            for m in range(self.signal.Y.shape[0]):
-                fig = plt.figure(figsize=(8,8))
-                ax2 = plt.subplot2grid(shape=(4,1),loc=(3,0))
-                ax1 = plt.subplot2grid(shape=(4,1),loc=(0,0), rowspan=3, sharex=ax2)
-                axes = self.plot_signal([ax1, ax2], m)
-                ax2.axhline(y=0, color='gray', linestyle='--')
-                plt.setp(ax1.get_xticklabels(), visible=False)
-                fig.add_subplot(111, frameon=False)
-                plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-                plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
-                plt.title('m={}'.format(m+1), fontsize=self.fig_property.fontsize+2)
-                self.figs['signal_{}'.format(m+1)] = Struct(fig=fig, axes=axes)
-
+        # set properties for plot_X and histogram if needed
         if ('plot_X' in self.fig_property.__dict__) and self.fig_property.plot_X:
-            print("plot_X")
-            nrow = self.filtered_signal.X.shape[1]
-            fig, axes = plt.subplots(nrow, 1, figsize=(8,4*nrow+4), sharex=True)
-            axes = [axes] if nrow==1 else axes
-            axes = self.plot_X(axes)
-            fig.add_subplot(111, frameon=False)
-            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-            plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
-            self.figs['X'] = Struct(fig=fig, axes=axes)
+            # set sampled index
+            Np = filtered_signal.X.shape[0]
+            if 'particles_ratio' in self.fig_property.__dict__ :
+                self.sampled_index = np.random.choice(Np, size=int(Np*self.fig_property.particles_ratio), replace=False)
+            else :
+                self.sampled_index = np.array(range(Np)) if Np<10 else np.random.choice(Np, size=10, replace=False)
 
-        if ('plot_histogram' in self.fig_property.__dict__) and self.fig_property.plot_histogram:
-            print("plot_histogram")
-            nrow = self.filtered_signal.X.shape[1]
-            fig, axes = plt.subplots(nrow ,1, figsize=(8,4*nrow+4), sharex=True)
-            axes = [axes] if nrow==1 else axes
-            axes = self.plot_histogram(axes)
-            fig.add_subplot(111, frameon=False)
-            plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-            plt.xlabel('\nhistogram [%]', fontsize=self.fig_property.fontsize)
-            self.figs['histogram'] = Struct(fig=fig, axes=axes)
-        
+            # set histogram property
+            if not 'histogram' in self.fig_property.__dict__:
+                self.fig_property.histogram = Struct(t=['-1'], n_bins=100)
+            else:
+                if not 'n_bins' in self.fig_property.histogram.__dict__:
+                    self.fig_property.histogram = Struct(t=self.fig_property.histogram.t, n_bins=100)
+                if not 't' in self.fig_property.histogram.__dict__:
+                    self.fig_property.histogram = Struct(t=['-1'], n_bins=self.fig_property.histogram.n_bins)
+
+            if len(self.fig_property.histogram.t) == 0:
+                self.fig_property.histogram = Struct(length=0, n_bins=self.fig_property.histogram.n_bins)
+            else:
+                t_index = [None] * len(self.fig_property.histogram.t)
+                for k, t in enumerate(self.fig_property.histogram.t):
+                    t_index[k] = np.mod(signal.t.shape[0]+int(t), signal.t.shape[0]) if isinstance(t, str) \
+                        else find_closest(t, signal.t.tolist(), pos=True)
+                t_index = list(dict.fromkeys(t_index))
+                t_index.sort()
+                self.fig_property.histogram = Struct(
+                    t = signal.t[t_index], 
+                    t_index = t_index, 
+                    length = len(t_index), 
+                    n_bins = self.fig_property.histogram.n_bins
+                )
+
+    def plot_figures(self, show=False):
+        if ('plot_signal' in self.fig_property.__dict__) and self.fig_property.plot_signal:
+            self.figs['signal'] = self.plot_signal()
+        if ('plot_X' in self.fig_property.__dict__) and self.fig_property.plot_X:
+            self.figs['X'] = self.plot_X()
         if ('plot_c' in self.fig_property.__dict__) and self.fig_property.plot_c:
-            print("plot_c")
-            for m in range(self.signal.Y.shape[0]):
-                nrow = self.filtered_signal.c.shape[1]
-                fig, axes = plt.subplots(nrow, 1, figsize=(8,4*nrow+4), sharex=True)
-                axes = [axes] if nrow==1 else axes
-                axes = self.plot_c(axes, m)
-                fig.add_subplot(111, frameon=False)
-                plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-                plt.xlabel('\ntime [s]', fontsize=self.fig_property.fontsize)
-                plt.title('m={}'.format(m+1), fontsize=self.fig_property.fontsize+2)
-                self.figs['c,m={}'.format(m+1)] = Struct(fig=fig, axes=axes)
-        
-        return self.figs
+            self.figs['c'] = self.plot_c()
+        if show:
+            self.show()
+    
+    def plot_signal(self):
+        print("plot_signal")
+        specs = [ [{'rowspan':3}] * self.signal.Y.shape[0],
+                [None] * self.signal.Y.shape[0],
+                [None] * self.signal.Y.shape[0],
+                [{}] * self.signal.Y.shape[0] ]
+        fig = tools.make_subplots(
+            rows = len(specs), 
+            cols = self.signal.Y.shape[0],
+            specs = specs,
+            shared_xaxes = True
+        )
 
-    def plot_signal(self, axes, m):
-        axes[0].plot(self.signal.t, self.signal.Y[m], color='gray', label=r'signal $Y_t$')
-        axes[0].plot(self.signal.t, self.filtered_signal.h_hat[m], color='magenta', label=r'estimation $\hat h_t$')
-        axes[0].legend(fontsize=self.fig_property.fontsize-5, loc='lower right', ncol=2)
-        axes[0].tick_params(labelsize=self.fig_property.fontsize)
-        axes[0].set_ylim(find_limits(self.signal.Y))
+        for m in range(self.signal.Y.shape[0]):
+            fig.append_trace(
+                trace=go.Scatter(
+                    x = self.signal.t,
+                    y = self.signal.Y[m,:],
+                    name = 'signal',
+                    line = dict(color='grey')
+                ), row=1, col=m+1)
+            fig.append_trace(
+                trace=go.Scatter(
+                    x = self.signal.t,
+                    y = self.filtered_signal.h_hat[m,:],
+                    name = 'estimation',
+                    line = dict(color='magenta')
+                ), row=1, col=m+1)
+            fig.append_trace(
+                trace=go.Scatter(
+                    x = self.signal.t,
+                    y = self.filtered_signal.h_hat[m,:] - self.signal.Y[m,:],
+                    name = 'error',
+                    line = dict(color='magenta')
+                ), row=len(specs), col=m+1)
         
-        axes[1].plot(self.signal.t,self.filtered_signal.error[m], color='magenta')
-        axes[1].tick_params(labelsize=self.fig_property.fontsize)
-        axes[1].set_ylim(find_limits(self.filtered_signal.error[m]))
-        # axes[1].set_ylabel('$L_2$ error', fontsize=self.fig_property.fontsize)
-        axes[1].set_ylabel('error', fontsize=self.fig_property.fontsize)
-        return axes
+        error_yaxis = {'yaxis{}'.format(self.signal.Y.shape[0]+1):dict(title='error')}
+        fig['layout'].update(
+            showlegend = False,
+            font = dict(size=self.fig_property.fontsize),
+            xaxis = dict(title='time [s]'),
+            **error_yaxis
+        )
+        return fig
 
-    def modified(self, signal, n):
-        if not 'restrictions' in self.fig_property.keys():
-            return signal
+    def plot_X(self):
+        print("plot_X")
+        if self.fig_property.histogram.length==0 :
+            row_spec = [{}]
         else:
-            signal = self.fig_property.restrictions.scaling[n]*signal
-            if not np.isnan(self.fig_property.restrictions.mod[n]):
-                signal = np.mod(signal, self.fig_property.restrictions.mod[n])
-        return signal
-
-    def set_limits(self, signal, n=np.nan, center=False):
-        limits = find_limits(signal)
-        if not 'restrictions' in self.fig_property.keys():
-            return limits
-        if not np.isnan(n):
-            if not np.isnan(self.fig_property.restrictions.mod[n]):
-                limits = find_limits(np.array([0, self.fig_property.restrictions.mod[n]]))
-            if self.fig_property.restrictions.zero[n]:
-                limits = find_limits(np.append(signal,0))
-        if center or (self.fig_property.restrictions.center[n] if not np.isnan(n) else False):
-            maximum = np.max(np.absolute(limits))
-            limits = [-maximum, maximum]
-        return limits
-
-    def plot_X(self, axes):
-        Np = self.filtered_signal.X.shape[0]
-        if 'particles_ratio' in self.fig_property.__dict__ :
-            sampling_number = np.random.choice(Np, size=int(Np*self.fig_property.particles_ratio), replace=False)
-        else :
-            sampling_number = np.array(range(Np))
-
-        def plot_Xn(self, ax, sampling_number, n=0):
-            state_of_filtered_signal = self.modified(self.filtered_signal.X[:,n,:], n)
-            for i in range(sampling_number.shape[0]):
-                ax.scatter(self.signal.t, state_of_filtered_signal[sampling_number[i]], s=0.5)
-            ax.tick_params(labelsize=self.fig_property.fontsize)
-            ax.set_ylim(self.set_limits(state_of_filtered_signal, n=n))
-            return ax
-
-        for n, ax in enumerate(axes):
-            plot_Xn(self, ax, sampling_number, n)
-        return axes
-
-    def plot_histogram(self, axes):
-
-        def plot_histogram_Xn(self, ax, bins, n=0, k=-1):
-            state_of_filtered_signal = self.modified(self.filtered_signal.X[:,n,:], n)
-            ax.hist(state_of_filtered_signal[:,k], bins=bins, color='blue', orientation='horizontal')
-            ax.xaxis.set_major_formatter(PercentFormatter(xmax=self.filtered_signal.X.shape[0], symbol=''))
-            ax.tick_params(labelsize=self.fig_property.fontsize)
-            ax.set_ylim(self.set_limits(state_of_filtered_signal, n=n))
-            return ax
+            row_spec = [{'colspan':self.fig_property.histogram.length}]
+            row_spec.extend([None] * (self.fig_property.histogram.length-1))
+            row_spec.extend([{}] * self.fig_property.histogram.length)
+        specs = [row_spec] * self.filtered_signal.X.shape[1]
         
-        if 'n_bins' in self.fig_property.__dict__ :
-            bins = self.fig_property.n_bins
-        else :
-            bins = 100
+        fig = tools.make_subplots(
+            rows = self.filtered_signal.X.shape[1],
+            cols = max(2*self.fig_property.histogram.length,1),
+            specs = specs,
+            shared_xaxes = True,
+            shared_yaxes = True
+        )
 
-        for n, ax in enumerate(axes):
-            plot_histogram_Xn(self, ax, bins, n)
-        return axes
+        limits = np.zeros((self.filtered_signal.X.shape[1],2))
+        for d in range(self.filtered_signal.X.shape[1]):
+            limits[d,:] = find_limits(self.filtered_signal.X[:,d,:])
+            for color_index, p in enumerate(self.sampled_index):
+                fig.append_trace(
+                    trace=go.Scatter(
+                        x = self.signal.t,
+                        y = self.filtered_signal.X[p,d,:],
+                        mode = 'markers',
+                        name = '$X^{}$'.format(p),
+                        line = dict(color=self.default_colors[np.mod(color_index,len(self.default_colors))]),
+                        legendgroup = 'X^{}'.format(p),
+                        showlegend = True if d==0 else False
+                    ), row=d+1, col=1)
+        
+            for k in range(self.fig_property.histogram.length):
+                trace = go.Histogram(
+                    y = self.filtered_signal.X[:,d,self.fig_property.histogram.t_index[k]],
+                    histnorm = 'probability',
+                    nbinsy = self.fig_property.histogram.n_bins,
+                    marker=dict(color='rgb(50, 50, 125)'),
+                    name = 't={}'.format(self.fig_property.histogram.t[k]),
+                    showlegend = False
+                )
+                fig.append_trace(trace = trace, row=d+1, col=self.fig_property.histogram.length+k+1)
 
-    def plot_c(self, axes, m):
+        xaxis = dict()
+        t_lines = []
+        for k in range(self.fig_property.histogram.length):
+            xaxis['xaxis{}'.format(self.fig_property.histogram.length+k+1)] = dict(title='t={}'.format(self.fig_property.histogram.t[k]), range=[0,1], dtick=0.25)
+            for d in range(self.filtered_signal.X.shape[1]):
+                t_lines.append(dict(
+                    type = 'line', 
+                    xref = 'x1',
+                    yref = 'y{}'.format(d+1),
+                    x0 = self.fig_property.histogram.t[k],
+                    x1 = self.fig_property.histogram.t[k],
+                    y0 = limits[d,0],
+                    y1 = limits[d,1],
+                    line = dict(color='rgb(50, 50, 125)', width=3)
+                ))
+        yaxis = dict()
+        for d in range(self.filtered_signal.X.shape[1]):
+            yaxis['yaxis{}'.format(d+1)] = dict(title=self.filtered_signal.states_label[d], range=limits[d,:])
+        fig['layout'].update(
+            font = dict(size=self.fig_property.fontsize),
+            showlegend = False,
+            shapes = t_lines,
+            xaxis1 = dict(title='time [s]'),
+            **xaxis,
+            **yaxis
+        )
+        return fig
 
-        def plot_cl(self, ax, m, l=0):
-            ax.plot(self.signal.t, self.filtered_signal.c[m,l,:], color='magenta')
-            ax.plot(self.signal.t, np.zeros(self.signal.t.shape), linestyle='--', color='gray', alpha=0.3)
-            ax.tick_params(labelsize=self.fig_property.fontsize)
-            ax.set_ylim(self.set_limits(self.filtered_signal.c[m,:,int(self.signal.t.shape[0]/2):], center=True))
-            ax.set_ylabel('$c_{}$'.format(l+1), fontsize=self.fig_property.fontsize, rotation=0)
-            return ax
+    def plot_c(self):
+        print("plot_c")
 
-        for l, ax in enumerate(axes):
-            plot_cl(self, ax, m, l)
+        fig = tools.make_subplots(
+            rows = self.filtered_signal.c.shape[1],
+            cols = self.filtered_signal.c.shape[0],
+            shared_xaxes = True,
+            shared_yaxes = False
+        )
 
-        return axes
+        for m in range(self.filtered_signal.c.shape[0]):
+            for l in range(self.filtered_signal.c.shape[1]):
+                fig.append_trace(
+                    trace=go.Scatter(
+                        x = self.signal.t,
+                        y = self.filtered_signal.c[m,l,:],
+                        name = r'$\kappa{}{}$'.format(m+1,l+1),
+                        line = dict(color='magenta'),
+                    ), row=l+1, col=m+1)
+        
+        yaxis = dict()
+        for l in range(self.filtered_signal.c.shape[1]):
+            yaxis['yaxis{}'.format(l+1)] = dict(title=r'$\kappa_{}$'.format(l+1))
 
-class Model1(Model):
-    def __init__(self, sigma_V, sigma_W):
-        self.freq_min=0.9
-        self.freq_max=1.1
-        self.sigma_V_min = 0.01
-        self.sigma_W_min = 0.1
-        Model.__init__(self, m=1, d=2, X0_range=[[1,2],[0,2*np.pi]], 
-                        states=['r','theta'], states_label=[r'$r$',r'$\theta$'], 
+        fig['layout'].update(
+            showlegend = False,
+            font = dict(size=self.fig_property.fontsize),
+            xaxis = dict(title='time [s]'),
+            **yaxis
+        )
+
+        return fig
+    
+    def show(self):
+        for name, fig in self.figs.items():
+            pyo.plot(fig, filename=name+'.html', include_mathjax='cdn')
+
+class Model_SinusoidalWave(Model):
+    def __init__(self, freq_range, amp_range, sigma_V, sigma_W, sigma_V_min=0.01, sigma_W_min=0.1):
+        self.freq_min=freq_range[0]
+        self.freq_max=freq_range[1]
+        self.sigma_V_min = sigma_V_min
+        self.sigma_W_min = sigma_W_min
+        Model.__init__(self, m=1, d=2, X0_range=[[0,2*np.pi],amp_range], 
+                        states=['theta','r'], states_label=[r'$\theta$',r'$r$'], 
                         sigma_V=self.modified_sigma_V(sigma_V), 
                         sigma_W=self.modified_sigma_W(sigma_W))
 
     def modified_sigma_V(self, sigma_V):
         sigma_V = np.array(sigma_V).clip(min=self.sigma_V_min)
-        sigma_V[1::2] = 0
+        sigma_V[0::2] = 0
         return sigma_V
     
     def modified_sigma_W(self, sigma_W):
@@ -460,83 +510,60 @@ class Model1(Model):
         return sigma_W
 
     def states_constraints(self, X):
-        # X[:,1] = np.mod(X[:,1], 2*np.pi)
+        X[:,0] = np.mod(X[:,0], 2*np.pi)
         return X
 
     def f(self, X):
         dXdt = np.zeros(X.shape)
-        dXdt[:,1] = np.linspace(self.freq_min*2*np.pi, self.freq_max*2*np.pi, X.shape[0])
+        dXdt[:,0] = np.linspace(self.freq_min*2*np.pi, self.freq_max*2*np.pi, X.shape[0])
         return dXdt
 
     def h(self, X):
-        return X[:,0]*np.cos(X[:,1]) 
+        return X[:,1]*np.cos(X[:,0]) 
 
-class Galerkin2(object):    # 2 states (r, theta) 2 base functions [1/2*r^2*cos(theta), 1/2*r^2*sin(theta)]
-    # Galerkin approximation in finite element method
-    def __init__(self):
-        # L: int, number of trial (base) functions
-        self.L = 2          # trial (base) functions
-        
-    def psi(self, X):
-        trial_functions = [ 1/2*np.power(X[:,0],2)*np.cos(X[:,1]), 1/2*np.power(X[:,0],2)*np.sin(X[:,1])]
-        return np.array(trial_functions)
-
-    # gradient of trial (base) functions
-    def grad_psi(self, X):
-        grad_trial_functions = [[ np.power(X[:,0],1)*np.cos(X[:,1]), -1/2*np.power(X[:,0],2)*np.sin(X[:,1])],\
-                                [ np.power(X[:,0],1)*np.sin(X[:,1]),  1/2*np.power(X[:,0],2)*np.cos(X[:,1])]]
-        return np.array(grad_trial_functions)
-
-    # gradient of gradient of trail (base) functions
-    def grad_grad_psi(self, X):
-        grad_grad_trial_functions = [[[                     np.cos(X[:,1]),     -np.power(X[:,0],1)*np.sin(X[:,1])],\
-                                      [ -np.power(X[:,0],1)*np.sin(X[:,1]), -1/2*np.power(X[:,0],2)*np.cos(X[:,1])]],\
-                                     [[                     np.sin(X[:,1]),      np.power(X[:,0],1)*np.cos(X[:,1])],\
-                                      [  np.power(X[:,0],1)*np.cos(X[:,1]), -1/2*np.power(X[:,0],2)*np.sin(X[:,1])]]]
-        return np.array(grad_grad_trial_functions)
-
-class Galerkin1(Galerkin):    # 2 states (r, theta) 2 base functions [r*cos(theta), r*sin(theta)]
+class Galerkin_SinusoidalWave(Galerkin):    # 2 states (theta, r) and 2 base functions [r*cos(theta), r*sin(theta)]
     # Galerkin approximation in finite element method
     def __init__(self, states, m):
         # L: int, number of trial (base) functions
         Galerkin.__init__(self, states, m, L=2)
         
     def psi(self, X):
-        trial_functions = [ np.power(X[:,0],1)*np.cos(X[:,1]), np.power(X[:,0],1)*np.sin(X[:,1])]
+        trial_functions = [ X[:,1]*np.cos(X[:,0]), X[:,1]*np.sin(X[:,0])]
         return np.array(trial_functions)
         
     # gradient of trial (base) functions
     def grad_psi(self, X):
-        grad_trial_functions = [[ np.cos(X[:,1]), -np.power(X[:,0],1)*np.sin(X[:,1])],\
-                                [ np.sin(X[:,1]),  np.power(X[:,0],1)*np.cos(X[:,1])]]
+        grad_trial_functions = [[ -X[:,1]*np.sin(X[:,0]), np.cos(X[:,0])],\
+                                [  X[:,1]*np.cos(X[:,0]), np.sin(X[:,0])]]
         return np.array(grad_trial_functions)
 
     # gradient of gradient of trail (base) functions
     def grad_grad_psi(self, X):
-        grad_grad_trial_functions = [[[ np.zeros(X[:,0].shape[0]),                     -np.sin(X[:,1])],\
-                                      [           -np.sin(X[:,1]), -np.power(X[:,0],1)*np.cos(X[:,1])]],\
-                                     [[ np.zeros(X[:,0].shape[0]),                      np.cos(X[:,1])],\
-                                      [            np.cos(X[:,1]), -np.power(X[:,0],1)*np.sin(X[:,1])]]]
+        grad_grad_trial_functions = [[[ -X[:,1]*np.cos(X[:,0]),           -np.sin(X[:,0])],\
+                                      [        -np.sin(X[:,0]), np.zeros(X[:,0].shape[0])]],\
+                                     [[ -X[:,1]*np.sin(X[:,0]),            np.cos(X[:,0])],\
+                                      [         np.cos(X[:,0]), np.zeros(X[:,0].shape[0])]]]
         return np.array(grad_grad_trial_functions)
         
 if __name__ == "__main__":
     
-    T = 10
-    sampling_rate = 160 # Hz
+    T = 5.5
+    sampling_rate = 100 # Hz
     dt = 1./sampling_rate
-    signal_type = Sinusoidal(dt)
+
+    sigma_V = [0.1]
+    signal_type = Sinusoidals(dt, amp=[[1]], freq=[1], theta0=[[np.pi/2]], sigma_V=sigma_V, SNR=[20])
     signal = Signal(signal_type=signal_type, T=T)
     
     Np = 1000
-    model = Model1(sigma_V=signal_type.sigma_V, sigma_W=signal_type.sigma_W)
-    galerkin = Galerkin1(model.states, model.m)
-    feedback_particle_filter = FPF(number_of_particles=Np, model=model, galerkin=galerkin, dt=signal_type.dt)
-    filtered_signal = feedback_particle_filter.run(signal.Y)
+    model = Model_SinusoidalWave(freq_range=[0.9,1.1], amp_range=[0.9,1.1], sigma_V=sigma_V, sigma_W=signal_type.sigma_W)
+    galerkin = Galerkin_SinusoidalWave(model.states, model.m)
+    fpf = FPF(number_of_particles=Np, model=model, galerkin=galerkin, dt=signal_type.dt)
+    filtered_signal = fpf.run(signal.Y)
 
     fontsize = 20
-    fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, plot_histogram=True, plot_c=True)
+    fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, plot_c=True)
     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
-    figs = figure.plot()
+    figure.plot_figures(show=True)
 
-    plt.show()
 

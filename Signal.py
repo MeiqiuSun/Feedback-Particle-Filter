@@ -4,10 +4,12 @@ Created on Fri Feb. 15, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
+from __future__ import division
+
 import numpy as np
-import matplotlib
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
+
+import plotly.offline as pyo
+import plotly.graph_objs as go
 
 class Signal(object):
     """Signal:
@@ -47,7 +49,7 @@ class Signal(object):
             self.sigma_V = np.array(signal_type.sigma_V)
             self.sigma_W = np.array(signal_type.sigma_W)
 
-            self.dX = np.zeros([self.sigma_V.shape[0], self.t.shape[0]])
+            self.dX = np.zeros([signal_type.X0.shape[0], self.t.shape[0]])
             self.X = np.zeros(self.dX.shape)
             self.dZ = np.zeros([self.sigma_W.shape[0], self.t.shape[0]])
             self.Y = np.zeros(self.dZ.shape)
@@ -74,6 +76,26 @@ class Signal(object):
             self.dZ = None
             self.Y = None
     
+    @staticmethod
+    def plot(signal, fontsize=15, show=False):
+        data = [None] * signal.Y.shape[0]
+        for m in range(signal.Y.shape[0]):
+            trace = go.Scatter(
+                x = signal.t,
+                y = signal.Y[m,:],
+                name = '$Y_{}$'.format(m+1)
+            )
+            data[m] = trace
+        layout = go.Layout(
+            title = 'signal',
+            font = dict(size=fontsize),
+            xaxis = dict(title='time')
+        )
+        fig = go.Figure(data=data, layout=layout)
+        if show:
+            pyo.plot(fig, filename='signal_test.html', include_mathjax='cdn')
+        return fig
+
     @classmethod
     def create(cls, t, *args):
         signal = Signal()
@@ -123,7 +145,6 @@ class Signal(object):
             signal.Y[self.sigma_W.shape[0]+m,:] = other.Y[m,:]
         
         return signal
-
 
 class Linear(object):
     def __init__(self, dt):
@@ -179,91 +200,61 @@ class LTI(object):
             Xk += dX
         return Y, X
 
-
-class Sinusoidal(object):
-    def __init__(self, dt):
-        # SNR: Signal to Noise ratio
-        self.SNR = [45]
-
-        # amplitude
-        self.amp = [1]
-        # frequency
-        self.freq = [1.2]
-        # initial state condition [A0, theta0]
-        self.X0 = [self.amp[0], 0]
-        # sampling time
-        self.dt = dt
-        # N states of state noises
-        self.sigma_V = [0, 0.1]
-        # M states of observation noises
-        self.sigma_W = np.sqrt(np.sum(np.square(self.amp))/np.power(10, np.array(self.SNR)/10)).tolist()
-    
-    # f(X, t): state tansition function maps states(X) to states(X_dot)
-    def f(self, X, t):
-        X_dot = np.zeros(len(self.sigma_V))
-        X_dot[0] = 0
-        X_dot[1] = 2*np.pi*self.freq[0]
-        return X_dot
-    
-    # h(X): observation function maps states(X) to observations(Y)
-    def h(self, X):
-        Y = np.zeros(len(self.sigma_W))
-        Y[0] = X[0]*np.sin(X[1])
-        return Y
-
 class Sinusoidals(object):
-    def __init__(self, dt, amp=[1,3], freq=[1.2,3.8], theta0=[0,0]):
-        # SNR: Signal to Noise ratio
-        self.SNR = [45]
+    # SNR: Signal to Noise ratio
+    def __init__(self, dt=0.01, amp=[[1]], freq=[1], theta0=[[0]], sigma_V=[0.1], SNR=[100]):
+        assert len(amp)==len(theta0)==len(SNR), \
+            "rows of amp ({}) and theta0 ({}) and length of SNR ({}) should be number of output m ({})".format(len(amp),len(theta0),len(SNR),len(SNR))
+        assert len(amp[0])==len(theta0[0])==len(freq)==len(sigma_V),\
+            "columns of amp ({}) and theta0 ({}) and length of sigma_V ({}) should be number of frequencies ({})".format(len(amp[0]),len(theta0[0]),len(sigma_V),len(freq))
         
-        # amplitude
-        self.amp = amp
-        # frequency
-        self.freq = freq
-        # initial state condition [A0, theta0, A1, theta1]
-        self.X0 = [None]*(2*len(self.amp))
-        for n in range(len(self.amp)):
-            self.X0[2*n] = self.amp[n]
-            self.X0[2*n+1] = theta0[n]
         # sampling time
         self.dt = dt
 
-        # N states of state noises
-        self.sigma_V = np.zeros(2*len(self.freq))
-        for n in range(len(self.freq)):
-            self.sigma_V[2*n+1] = 0.1
-        # M states of observation noises
-        self.sigma_W = np.sqrt(np.sum(np.square(self.amp))/np.power(10, np.array(self.SNR)/10)).tolist()
+        # amplitude
+        self.amp = np.array(amp)
+        # frequency
+        self.freq = np.array(freq)
+        # theta0
+        self.theta0 = np.array(theta0)
+
+        # initial states condition 
+        self.X0 = np.zeros(self.freq.shape)
+        # for m in range(self.amp.shape[0]):
+        #     for k in range(self.amp.shape[1]):
+        #         # print(m,k,m*self.amp.shape[1]+k)
+        #         self.X0[m*self.amp.shape[1]+k] = np.mod(theta0[m][k], 2*np.pi)
+        
+        # k states of frequency noises
+        self.sigma_V = np.array(sigma_V)
+        
+        # m states of observation noises
+        self.sigma_W = np.zeros(len(SNR))
+        for m in range(len(SNR)):
+            self.sigma_W[m] = np.max(self.amp[m,:])/np.power(10, SNR[m]/10)
     
     # f(X, t): state tansition function maps states(X) to states(X_dot)
     def f(self, X, t):
-        X_dot = np.zeros(len(self.sigma_V))
-        for n in range(len(self.freq)):
-            X_dot[2*n+1] = 2*np.pi*self.freq[n]
+        X_dot = 2*np.pi*self.freq
+        # for k in range(self.freq.shape[0]):
+        #     X_dot[k::self.freq.shape[0]] = 2*np.pi*self.freq[k]
         return X_dot
     
     # h(X): observation function maps states(X) to observations(Y)
     def h(self, X):
-        Y = np.zeros(len(self.sigma_W))
-        Y[0] = 0
-        for n in range(len(self.freq)):
-            Y[0] += X[2*n]*np.sin(X[2*n+1])
+        Y = np.zeros(self.sigma_W.shape[0])
+        for m in range(self.sigma_W.shape[0]):
+            for k in range(self.freq.shape[0]):
+                Y[m] += self.amp[m,k]*np.sin(X[k]+self.theta0[m,k])
         return Y
 
 if __name__ == "__main__":
     
-    T = 10.
-    fs = 160
-    dt = 1/fs
-    signal_types = {'Linear':Linear, 'Sinusoidal':Sinusoidal, 'Sinusoidals':Sinusoidals}
-    signal_type = signal_types['Sinusoidals'](dt)
-    signal = Signal(signal_type=signal_type, T=T)
+    T = 10
+    sampling_rate = 100 # Hz
+    dt = 1./sampling_rate
 
-    fontsize = 20
-    fig, ax = plt.subplots(1, 1, figsize=(9,7))
-    for m in range(signal.Y.shape[0]):
-        ax.plot(signal.t, signal.Y[m,:], label='$Y_{}$'.format(m+1))
-    plt.legend(fontsize=fontsize-5)
-    plt.tick_params(labelsize=fontsize)
-    plt.xlabel('time [s]', fontsize=fontsize)
-    plt.show()
+    signal_type = Sinusoidals(dt, amp=[[2,1],[1,3]], freq=[1,10], theta0=[[0, np.pi/4],[np.pi/2, np.pi]], sigma_V=[0.01, 0.1], SNR=[100,100])
+    signal = Signal(signal_type=signal_type, T=T)
+    fig = Signal.plot(signal)
+    pyo.plot(fig, filename='signal_test.html', include_mathjax='cdn')
