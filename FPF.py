@@ -5,6 +5,7 @@ Created on Wed Jan. 23, 2019
 """
 
 from __future__ import division
+from __future__ import print_function
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -13,27 +14,26 @@ from plotly import tools
 import plotly.offline as pyo
 import plotly.graph_objs as go
 
-from Tool import Struct, isiterable, find_limits, find_closest
-from Signal import Signal, Sinusoidals
+from Tool import Struct, isiterable, find_limits, find_closest, default_colors
+from Signal import Signal, Sinusoids
 
 
 class Particles(object):
     """Particles:
         Notation Note:
-            d: dimenstion of states
-        Initialize = Particles(number_of_particles, X0_range, states_constraints, m)
+            d: number of states
+        Initialize = Particles(self, number_of_particles, X0_range, states_constraints, m):
             number_of_particles: integer, number of particles
-            X0_range: 2D list of float with length d-by-2, range of initial states
+            X0_range: 2D list of float with the length d-by-2, range of initial states
             states_constraints: function, constraints on states
-            m: integer, number of outputs
-        Members =
+            m: integer, number of observations
+        Members:
             Np: integer, number of particles
             X: numpy array with the shape of (Np,d), the estimated states for Np particles
             h: numpy array with the shape of (Np,m), the esitmated observations for Np particles
             states_constraints: function, constraints on states
-        Methods =
-            update(): use states_constraints function to update states in all particles
-            get_X(): return X (if the dimenstion of states is 1, then the shape of returned array is (Np,), otherwise (Np, d))
+        Methods:
+            update(self, dX): use states_constraints function to update states in all particles
     """
 
     def __init__(self, number_of_particles, X0_range, states_constraints, m):
@@ -43,15 +43,38 @@ class Particles(object):
             self.X[:,d] = np.linspace(X0_range[d][0], X0_range[d][1], self.Np)
         self.h = np.zeros([self.Np, m])
         self.states_constraints = states_constraints
+        pass
 
     def update(self, dX):
         self.X = self.states_constraints(self.X+dX)
-        return 
-
-    def get_X(self):
-        return np.squeeze(self.X)
+        pass
 
 class Model(ABC):
+    """Model:
+        Notation Notes:
+            Np: number of particles
+        Initialize = Model(self, m, d, X0_range, states, states_label, sigma_V, sigma_W):
+            m: int, number of observations
+            d: int, number of states
+            X0_range: 2D list of float with the length d-by-2, range of initial states
+            states: list of string with the length d, name of states
+            states_label:  list of string with the length d, legend name of states
+            sigma_V: 1D list of float with the length d, standard deviation of process noise
+            sigma_W: 1D list of float with the length m, standard deviation of observation noise
+        Members:
+            m: int, number of observations
+            d: int, number of states
+            X0_range: numpy array with the shape of (d,2), range of initial states
+            states: list of string with the length d, name of states
+            states_label:  list of string with the length d, legend name of states
+            sigma_V: numpy array with the shape of (d,), standard deviation of process noise
+            sigma_W: numpy array with the shape of (m,), standard deviation of observation noise
+        Methods:
+            @abs states_constraints(self, X): return an numpy array with the shape of (Np,d), modified states
+            @abs f(self, X, t): return a numpy array with the shape of (Np,d), state tansition function maps states to rate change of states
+            @abs h(self, X): return a numpy array with the shape of (Np,m), observation function maps states to observations
+    """
+
     def __init__(self, m, d, X0_range, states, states_label, sigma_V, sigma_W):
         self.m = int(m)
         self.d = int(d)
@@ -63,29 +86,50 @@ class Model(ABC):
     
     @abstractmethod
     def states_constraints(self, X):
-        return X
+        # return X
+        raise NotImplementedError
     
     @abstractmethod
-    def f(self, X):
-        dXdt = np.zeros(X.shape)
-        return dXdt
+    def f(self, X, t):
+        # dXdt = np.zeros(X.shape)
+        raise NotImplementedError
 
     @abstractmethod
     def h(self, X):
-        Y = np.zeros((X.shape[0], self.m))
-        return Y
+        # Y = np.zeros(self.sigma_W.shape)
+        raise NotImplementedError
 
 class Galerkin(ABC):
+    """Galerkin: An approximation in finite element method:
+        Notation Notes:
+            Np: number of particles
+        Initialize = Galerkin(self, states, m, L):
+            states: 1D list of string with the length of d, name of states
+            m: int, number of observations
+            L: int, number of base functions
+        Members:
+            states: 
+                (1) in the __init__ function: 1D list of string with the length of d, name of states
+                (2) after the __init__ function: 1D list of numpy array with the length of d, value of states of each particles (refer to method split(self, X))
+            d: int, number of states
+            m: int, number of observations
+            L: int, number of base functions
+            c: numpy array with the shape of (m,L), coefficients of base functions
+        Methods:
+            @abs psi(self, X): return a numpy array with the shape of (L,Np), base functions
+            @abs grad_psi(self, X): return a numpy array with the shape of (L,d,Np), gradient of base functions
+            @abs grad_grad_psi(self, X): return a numpy array with the shape of (L,d,d,Np), gradient of gradient of base functions
+            split(self, X): split values of X into states
+            calculate_K(self, X, normalized_dh): return two numpy arrays with the shape of (Np,d,m) and (Np,d,m,d), gain function K and gradient of K
+    """
+
     def __init__(self, states, m, L):
         self.states = ['self.'+state for state in states]
         self.d = len(states)
         self.m = int(m)
         self.L = int(L)
         self.c = np.zeros((self.m, self.L))
-    
-    def split(self, X):
-        for d in range(self.d):
-            exec(self.states[d]+' = X[:,{}]'.format(d))
+        return
 
     @abstractmethod
     def psi(self, X):
@@ -101,32 +145,38 @@ class Galerkin(ABC):
     def grad_grad_psi(self, X):
         raise NotImplementedError("Subclasses of Galerkin must set an instance method grad_grad_psi(self, X)")    
     
+    def split(self, X):
+        for d in range(self.d):
+            exec(self.states[d]+' = X[:,{}]'.format(d))
+        return
+
     def calculate_K(self, X, normalized_dh):
         """calculate the optimal feedback gain function K by using Galerkin Approximation to solve the BVP
-            Arguments = 
-                X: numpy array with the shape of (Np, d), the estimated states for Np particles
+            Arguments:
+                X: numpy array with the shape of (Np,d), the estimated states for Np particles
                 normalized_dh: numpy array with the shape of (Np,m), normalized filtered observation difference between each particle and mean
-            Variables = 
+            Variables:
                 K: numpy array with the shape of (Np,d,m), gain for each particle
                 partial_K: numpy array with the shape of (Np,d,m,d), partial_K/partial_X for each particle
                 psi: numpy array with the shape of (L,Np), base functions psi
                 grad_psi: numpy array with the shape of (L,d,Np), gradient of base functions psi
                 grad_grad_psi: numpy array with the shape of (L,d,d,Np), gradient of gradient of base functions psi
                 A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
-                b: numpy array with the shape of (m,L), b = Exp[normalized_dh*psi] differ from channel to channel (m)
+                b: numpy array with the shape of (m,L), b = Exp[normalized_dh*psi] differ from one observation to the other
                 c: numpy array with the shape of (m,L), the solution to A*c=b
         """
+
         def calculate_A(self, grad_psi):
             """calculate the A matrix in the Galerkin Approximation in Finite Element Method
-                Arguments = 
+                Arguments:
                     grad_psi: numpy array with the shape of (L,d,Np), gradient of base functions psi
-                Variables =
+                Variables:
                     A: numpy array with the shape of (L,L), A_(i,j) = Exp[grad_psi_j dot grad_psi_i]
             """
+
             A = np.zeros([self.L, self.L])
             for li in range(self.L):
                 for lj in range(li, self.L):
-                    # A[li,lj] = np.sum(grad_psi[lj]*grad_psi[li])/self.particles.Np
                     A[li,lj] = np.mean(np.sum(grad_psi[lj]*grad_psi[li], axis=0))
                     if not li==lj:
                         A[lj,li] = A[li,lj]
@@ -139,12 +189,13 @@ class Galerkin(ABC):
         
         def calculate_b(self, normalized_dh, psi):
             """calculate the b vector in the Galerkin Approximation in Finite Element Method
-                Arguments = 
+                Arguments:
                     normalized_dh: numpy array with the shape of (Np,), normalized mth channel of filtered observation difference between each particle and mean
                     psi: numpy array with the shape of (L,Np), base functions psi
-                Variables = 
+                Variables:
                     b = numpy array with the shape of (L,), b = Exp[normalized_dh*psi]
             """
+
             b = np.zeros(self.L)
             for l in range(self.L):
                 b[l] = np.mean(normalized_dh*psi[l])
@@ -173,7 +224,7 @@ class FPF(object):
             model: class Model, f, h and other paratemers are defined at here
             galerkin: class Galerkin, base functions are defined at here
             dt: float, size of time step in sec
-        Members =
+        Members:
             d: number of states(X)
             m: number of observations(Y)
             sigma_V: numpy array with the shape of (d,), standard deviations of process noise(X)
@@ -183,13 +234,13 @@ class FPF(object):
             dt: float, size of time step in sec
             particles: class Particles,
             galerkin: class Galerkin, base functions are defined at here
-            c: numpy array with the shape of (m, L), 
+            c: numpy array with the shape of (m,L), coefficients of base functions
             h_hat: numpy array with the shape of (m,), filtered observations
-        Methods =
-            optimal_control(dZ, dI): calculate the optimal control with new observations(Y)
-            calculate_h_hat(): Calculate h for each particle and h_hat by averaging h from all particles
-            update(Y): Update each particle with new observations(Y)
-            run(Y): Run FPF with time series observations(Y)
+        Methods:
+            optimal_control(self, dI, dZ): calculate the optimal control with new observations(Y)
+            calculate_h_hat(self): Calculate h for each particle and h_hat by averaging h from all particles
+            update(self, Y): Update each particle with new observations(Y)
+            run(self, Y, show_time=False): Run FPF with time series observations(Y)
     """
     def __init__(self, number_of_particles, model, galerkin, dt):
         self.states_label = model.states_label
@@ -244,15 +295,7 @@ class FPF(object):
         return dU
 
     def run(self, Y, show_time=False):
-        """Run FPF with time series observations(Y):
-            Arguments = 
-                Y: numpy array with the shape of (m,T/dt+1), observations in time series
-            Variables = 
-                h_hat: numpy array with the shape of (m,T/dt+1), filtered observations in time series
-                X: numpy array with the shape of (d,T/dt+1), the states for Np particles in time series
-            Return =
-                filtered_signal: Struct(h_hat, X), filtered observations with information of particles
-        """
+        """Run FPF with time series observations(Y)"""
         h_hat = np.zeros(Y.shape)
         h = np.zeros([self.particles.Np, self.m, Y.shape[1]])
         X = np.zeros([self.particles.Np, self.d, Y.shape[1]])
@@ -272,22 +315,9 @@ class FPF(object):
 
 class Figure(object):
 
-    default_colors = [
-        '#1f77b4',  # muted blue
-        '#ff7f0e',  # safety orange
-        '#2ca02c',  # cooked asparagus green
-        '#d62728',  # brick red
-        '#9467bd',  # muted purple
-        '#8c564b',  # chestnut brown
-        '#e377c2',  # raspberry yogurt pink
-        '#7f7f7f',  # middle gray
-        '#bcbd22',  # curry yellow-green
-        '#17becf'   # blue-teal
-        ]
-
-    def __init__(self, fig_property, signal, filtered_signal):
+    def __init__(self, fig_property, Y, filtered_signal):
         self.fig_property = fig_property
-        self.signal = signal
+        self.Y = Y
         self.filtered_signal = filtered_signal
         self.figs = dict()
 
@@ -314,12 +344,12 @@ class Figure(object):
             else:
                 t_index = [None] * len(self.fig_property.histogram.t)
                 for k, t in enumerate(self.fig_property.histogram.t):
-                    t_index[k] = np.mod(signal.t.shape[0]+int(t), signal.t.shape[0]) if isinstance(t, str) \
-                        else find_closest(t, signal.t.tolist(), pos=True)
+                    t_index[k] = np.mod(Y.t.shape[0]+int(t), Y.t.shape[0]) if isinstance(t, str) \
+                        else find_closest(t, Y.t.tolist(), pos=True)
                 t_index = list(dict.fromkeys(t_index))
                 t_index.sort()
                 self.fig_property.histogram = Struct(
-                    t = signal.t[t_index], 
+                    t = Y.t[t_index], 
                     t_index = t_index, 
                     length = len(t_index), 
                     n_bins = self.fig_property.histogram.n_bins
@@ -337,41 +367,41 @@ class Figure(object):
     
     def plot_signal(self):
         print("plot_signal")
-        specs = [ [{'rowspan':3}] * self.signal.Y.shape[0],
-                [None] * self.signal.Y.shape[0],
-                [None] * self.signal.Y.shape[0],
-                [{}] * self.signal.Y.shape[0] ]
+        specs = [ [{'rowspan':3}] * self.Y.value.shape[0],
+                [None] * self.Y.value.shape[0],
+                [None] * self.Y.value.shape[0],
+                [{}] * self.Y.value.shape[0] ]
         fig = tools.make_subplots(
             rows = len(specs), 
-            cols = self.signal.Y.shape[0],
+            cols = self.Y.value.shape[0],
             specs = specs,
             shared_xaxes = True
         )
 
-        for m in range(self.signal.Y.shape[0]):
+        for m in range(self.Y.value.shape[0]):
             fig.append_trace(
                 trace=go.Scatter(
-                    x = self.signal.t,
-                    y = self.signal.Y[m,:],
+                    x = self.Y.t,
+                    y = self.Y.value[m,:],
                     name = 'signal',
                     line = dict(color='grey')
                 ), row=1, col=m+1)
             fig.append_trace(
                 trace=go.Scatter(
-                    x = self.signal.t,
+                    x = self.Y.t,
                     y = self.filtered_signal.h_hat[m,:],
                     name = 'estimation',
                     line = dict(color='magenta')
                 ), row=1, col=m+1)
             fig.append_trace(
                 trace=go.Scatter(
-                    x = self.signal.t,
-                    y = self.filtered_signal.h_hat[m,:] - self.signal.Y[m,:],
+                    x = self.Y.t,
+                    y = self.filtered_signal.h_hat[m,:] - self.Y.value[m,:],
                     name = 'error',
                     line = dict(color='magenta')
                 ), row=len(specs), col=m+1)
         
-        error_yaxis = {'yaxis{}'.format(self.signal.Y.shape[0]+1):dict(title='error')}
+        error_yaxis = {'yaxis{}'.format(self.Y.value.shape[0]+1):dict(title='error')}
         fig['layout'].update(
             showlegend = False,
             font = dict(size=self.fig_property.fontsize),
@@ -404,11 +434,11 @@ class Figure(object):
             for color_index, p in enumerate(self.sampled_index):
                 fig.append_trace(
                     trace=go.Scatter(
-                        x = self.signal.t,
+                        x = self.Y.t,
                         y = self.filtered_signal.X[p,d,:],
                         mode = 'markers',
                         name = '$X^{}$'.format(p),
-                        line = dict(color=self.default_colors[np.mod(color_index,len(self.default_colors))]),
+                        line = dict(color=default_colors[np.mod(color_index,len(default_colors))]),
                         legendgroup = 'X^{}'.format(p),
                         showlegend = True if d==0 else False
                     ), row=d+1, col=1)
@@ -466,7 +496,7 @@ class Figure(object):
             for l in range(self.filtered_signal.c.shape[1]):
                 fig.append_trace(
                     trace=go.Scatter(
-                        x = self.signal.t,
+                        x = self.Y.t,
                         y = self.filtered_signal.c[m,l,:],
                         name = r'$\kappa{}{}$'.format(m+1,l+1),
                         line = dict(color='magenta'),
@@ -522,22 +552,18 @@ class Model_SinusoidalWave(Model):
         return X[:,1]*np.cos(X[:,0]) 
 
 class Galerkin_SinusoidalWave(Galerkin):    # 2 states (theta, r) and 2 base functions [r*cos(theta), r*sin(theta)]
-    # Galerkin approximation in finite element method
     def __init__(self, states, m):
-        # L: int, number of trial (base) functions
         Galerkin.__init__(self, states, m, L=2)
         
     def psi(self, X):
         trial_functions = [ X[:,1]*np.cos(X[:,0]), X[:,1]*np.sin(X[:,0])]
         return np.array(trial_functions)
         
-    # gradient of trial (base) functions
     def grad_psi(self, X):
         grad_trial_functions = [[ -X[:,1]*np.sin(X[:,0]), np.cos(X[:,0])],\
                                 [  X[:,1]*np.cos(X[:,0]), np.sin(X[:,0])]]
         return np.array(grad_trial_functions)
 
-    # gradient of gradient of trail (base) functions
     def grad_grad_psi(self, X):
         grad_grad_trial_functions = [[[ -X[:,1]*np.cos(X[:,0]),           -np.sin(X[:,0])],\
                                       [        -np.sin(X[:,0]), np.zeros(X[:,0].shape[0])]],\
@@ -552,18 +578,19 @@ if __name__ == "__main__":
     dt = 1./sampling_rate
 
     sigma_V = [0.1]
-    signal_type = Sinusoidals(dt, amp=[[1]], freq=[1], theta0=[[np.pi/2]], sigma_V=sigma_V, SNR=[20])
-    signal = Signal(signal_type=signal_type, T=T)
+    signal_type = Sinusoids(dt, amp=[[1]], freq=[1], theta0=[[np.pi/2]], sigma_V=sigma_V, SNR=[20])
+    Y, _ = Signal.create(signal_type=signal_type, T=T)
     
     Np = 1000
     model = Model_SinusoidalWave(freq_range=[0.9,1.1], amp_range=[0.9,1.1], sigma_V=sigma_V, sigma_W=signal_type.sigma_W)
     galerkin = Galerkin_SinusoidalWave(model.states, model.m)
     fpf = FPF(number_of_particles=Np, model=model, galerkin=galerkin, dt=signal_type.dt)
-    filtered_signal = fpf.run(signal.Y)
+    filtered_signal = fpf.run(Y.value)
 
     fontsize = 20
     fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, plot_c=True)
-    figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
+    figure = Figure(fig_property=fig_property, Y=Y, filtered_signal=filtered_signal)
     figure.plot_figures(show=True)
+    pass
 
 

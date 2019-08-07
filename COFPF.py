@@ -4,34 +4,18 @@ Created on Tue Jun. 24, 2019
 @author: Heng-Sheng (Hanson) Chang
 """
 
-from Tool import Struct
-from CFPF import CFPF, Figure
-from OFPF import OFPF, complex_to_mag_phase
-from Signal import Signal, LTI, Sinusoidals
+from __future__ import division
+from __future__ import print_function
 
 import numpy as np
-import matplotlib
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
-# from matplotlib.ticker import PercentFormatter
+
+from Tool import Struct
+from Signal import Signal, Sinusoids
+from System import LTI
+from OFPF import OFPF, complex_to_mag_phase
+from CFPF import CFPF, Figure
 
 class COFPF(CFPF):
-    """COFPF: Coupled Oscillating Feedback Particle Filter
-        Initialize = COFPF(ofpfs, sigma_W, dt)
-            ofpfs: 1D list of Struct, properties of OFPF
-            sigma_W: 1D list of float with legnth m, standard deviations of noise of observations(Y)
-            dt: float, size of time step in sec
-        Members = 
-            Nc: number of channels
-            fpfs: 1D list of OFPF with length Nc, a list of OFPF for each channel
-            dt: float, size of time step in sec
-            h_hat: numpy array with the shape of (m,), filtered observations
-        Methods =
-            calculate_h_hat(): Summation of h_hat for all OFPF channels
-            update(Y): Update each OFPF channel with new observation data Y
-            run(Y): Run COFPF with time series observations(Y)
-    """
-
     def __init__(self, ofpfs, sigma_W, dt):
         self.Nc = len(ofpfs)
         self.fpfs = [None]*self.Nc
@@ -62,7 +46,7 @@ def bode(omegas):
         U = np.reshape(U, (-1, t.shape[0]))
         print("sampling time = {} [s], Total time = {} [s], Total steps = {}".format(dt, T, int(T/dt)))
         Y, _ = sys.run(X0=X0, U=U)
-        signal = Signal.create(t, U, Y)
+        signal = Signal(t, U, Y)
         
         ofpfs = [None] * omegas[:,i].shape[0]
         for j in range(omegas[:,i].shape[0]):
@@ -89,18 +73,18 @@ if __name__ == "__main__":
     dt = 1./sampling_rate
 
     sigma_V = [0.01, 0.02]
-    signal_type = Sinusoidals(dt, amp=[[1,0],[0,1]], freq=[10,2], theta0=[[np.pi/2,0],[0, np.pi]], sigma_V=sigma_V, SNR=[20, 20])
-    signal = Signal(signal_type=signal_type, T=T)
+    signal_type = Sinusoids(dt, amp=[[1,0],[0,1]], freq=[10,2], theta0=[[np.pi/2,0],[0, np.pi]], sigma_V=sigma_V, SNR=[20, 20])
+    Y, _ = Signal.create(signal_type=signal_type, T=T)
 
     ofpfs = [None] * 2
     ofpfs[0] = Struct(number_of_particles=1000, freq_range=[10,10], amp_range=[[0.9,1.1],[0.0,0.1]], sigma_amp=[0.1,0.01], sigma_freq=0.1)
     ofpfs[1] = Struct(number_of_particles=1000, freq_range=[2.1,2.1], amp_range=[[0.0,0.1],[0.9,1.1]], sigma_amp=[0.01,0.1], sigma_freq=0.1)
     cofpf = COFPF(ofpfs, sigma_W=[0.1, 0.1], dt=dt)
-    filtered_signal = cofpf.run(signal.Y, show_time=True)
+    filtered_signal = cofpf.run(Y.value, show_time=True)
 
     fontsize = 20
     fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True)
-    figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
+    figure = Figure(fig_property=fig_property, Y=Y, filtered_signal=filtered_signal)
     figure.plot_figures(show=True)
 
 

@@ -5,6 +5,7 @@ Created on Wed Feb. 13, 2019
 """
 
 from __future__ import division
+from __future__ import print_function
 
 import numpy as np
 
@@ -12,13 +13,8 @@ from plotly import tools
 import plotly.offline as pyo
 import plotly.graph_objs as go
 
-from Tool import Struct, isiterable, find_limits, find_closest
+from Tool import Struct, isiterable, find_limits, find_closest, default_colors
 from FPF import FPF, Model, Galerkin
-
-# import matplotlib
-# matplotlib.use("TkAgg")
-# import matplotlib.pyplot as plt
-# from matplotlib.ticker import PercentFormatter
 
 class CFPF(object):
     """CFPF: Coupled Feedback Partilce Filter
@@ -32,9 +28,9 @@ class CFPF(object):
             dt: float, size of time step in sec
             h_hat: numpy array with the shape of (m,), filtered observations
         Methods =
-            calculate_h_hat(): Summation of h_hat for all FPF channels
-            update(Y): Update each FPF channel with new observation data Y
-            run(Y): Run CFPF with time series observations(Y)
+            calculate_h_hat(self): Summation of h_hat for all FPF channels
+            update(self, Y): Update each FPF channel with new observations(Y)
+            run(self, Y, show_time=False): Run CFPF with time series observations(Y)
     """
 
     def __init__(self, fpfs, sigma_W, dt):
@@ -88,22 +84,9 @@ class CFPF(object):
 
 class Figure(object):
 
-    default_colors = [
-        '#1f77b4',  # muted blue
-        '#ff7f0e',  # safety orange
-        '#2ca02c',  # cooked asparagus green
-        '#d62728',  # brick red
-        '#9467bd',  # muted purple
-        '#8c564b',  # chestnut brown
-        '#e377c2',  # raspberry yogurt pink
-        '#7f7f7f',  # middle gray
-        '#bcbd22',  # curry yellow-green
-        '#17becf'   # blue-teal
-        ]
-
-    def __init__(self, fig_property, signal, filtered_signal):
+    def __init__(self, fig_property, Y, filtered_signal):
         self.fig_property = fig_property
-        self.signal = signal
+        self.Y = Y
         self.filtered_signal = filtered_signal
         self.figs = dict()
 
@@ -134,12 +117,12 @@ class Figure(object):
             else:
                 t_index = [None] * len(self.fig_property.histogram.t)
                 for k, t in enumerate(self.fig_property.histogram.t):
-                    t_index[k] = np.mod(signal.t.shape[0]+int(t), signal.t.shape[0]) if isinstance(t, str) \
-                        else find_closest(t, signal.t.tolist(), pos=True)
+                    t_index[k] = np.mod(Y.t.shape[0]+int(t), Y.t.shape[0]) if isinstance(t, str) \
+                        else find_closest(t, Y.t.tolist(), pos=True)
                 t_index = list(dict.fromkeys(t_index))
                 t_index.sort()
                 self.fig_property.histogram = Struct(
-                    t = signal.t[t_index], 
+                    t = Y.t[t_index], 
                     t_index = t_index, 
                     length = len(t_index), 
                     n_bins = self.fig_property.histogram.n_bins
@@ -156,49 +139,49 @@ class Figure(object):
     
     def plot_signal(self):
         print("plot_signal")
-        specs = [ [{'rowspan':3}] * self.signal.Y.shape[0],
-                [None] * self.signal.Y.shape[0],
-                [None] * self.signal.Y.shape[0],
-                [{}] * self.signal.Y.shape[0],
-                [{}] * self.signal.Y.shape[0] ]
+        specs = [ [{'rowspan':3}] * self.Y.value.shape[0],
+                [None] * self.Y.value.shape[0],
+                [None] * self.Y.value.shape[0],
+                [{}] * self.Y.value.shape[0],
+                [{}] * self.Y.value.shape[0] ]
         fig = tools.make_subplots(
             rows = len(specs), 
-            cols = self.signal.Y.shape[0],
+            cols = self.Y.value.shape[0],
             specs = specs,
             shared_xaxes = True
         )
 
-        for m in range(self.signal.Y.shape[0]):
+        for m in range(self.Y.value.shape[0]):
             fig.append_trace(
                 trace=go.Scatter(
-                    x = self.signal.t,
-                    y = self.signal.Y[m,:],
+                    x = self.Y.t,
+                    y = self.Y.value[m,:],
                     name = 'signal',
                     line = dict(color='grey')
                 ), row=1, col=m+1)
             fig.append_trace(
                 trace=go.Scatter(
-                    x = self.signal.t,
+                    x = self.Y.t,
                     y = self.filtered_signal.h_hat[m,:],
                     name = 'estimation',
                     line = dict(color='magenta')
                 ), row=1, col=m+1)
             fig.append_trace(
                 trace=go.Scatter(
-                    x = self.signal.t,
-                    y = self.filtered_signal.h_hat[m,:] - self.signal.Y[m,:],
+                    x = self.Y.t,
+                    y = self.filtered_signal.h_hat[m,:] - self.Y.value[m,:],
                     name = 'error',
                     line = dict(color='magenta')
                 ), row=len(specs)-1, col=m+1)
             for j in range(len(self.filtered_signal.fpfs)):
                 fig.append_trace(
                     trace=go.Scatter(
-                        x = self.signal.t,
+                        x = self.Y.t,
                         y = self.filtered_signal.fpfs[j].h_hat[m,:],
                         name = r'$\hat h_{}$'.format(j+1),
-                        line = dict(color=self.default_colors[np.mod(j,len(self.default_colors))])
+                        line = dict(color=default_colors[np.mod(j,len(default_colors))])
                     ), row=len(specs), col=m+1)
-        error_yaxis = {'yaxis{}'.format(self.signal.Y.shape[0]+1):dict(title='error')}
+        error_yaxis = {'yaxis{}'.format(self.Y.value.shape[0]+1):dict(title='error')}
         fig['layout'].update(
             showlegend = False,
             font = dict(size=self.fig_property.fontsize),
@@ -231,11 +214,11 @@ class Figure(object):
             for color_index, p in enumerate(self.sampled_index[j]):
                 fig.append_trace(
                     trace=go.Scatter(
-                        x = self.signal.t,
+                        x = self.Y.t,
                         y = self.filtered_signal.fpfs[j].X[p,d,:],
                         mode = 'markers',
                         name = '$X^{}$'.format(p),
-                        line = dict(color=self.default_colors[np.mod(color_index,len(self.default_colors))]),
+                        line = dict(color=default_colors[np.mod(color_index,len(default_colors))]),
                         legendgroup = 'X^{}'.format(p),
                         showlegend = True if d==0 else False
                     ), row=d+1, col=1)

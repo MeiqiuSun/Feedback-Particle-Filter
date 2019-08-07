@@ -5,13 +5,15 @@ Created on Thu Jun. 20, 2019
 """
 
 from __future__ import division
+from __future__ import print_function
 
-import sympy
 import numpy as np
+import sympy
 
-from FPF import FPF, Model, Galerkin, Figure
-from Signal import Signal, LTI, Sinusoidals
 from Tool import Struct
+from Signal import Signal, Sinusoids
+from System import LTI
+from FPF import FPF, Model, Galerkin, Figure
 
 class Model_Oscillator(Model):
     def __init__(self, freq_range, amp_range, sigma_freq, sigma_amp, sigma_W, tolerance):
@@ -22,7 +24,6 @@ class Model_Oscillator(Model):
         self.freq_min = freq_range[0]
         self.freq_max = freq_range[1]
         X0_range = [[0,2*np.pi]] * d
-        # X0_range = [[0,0]] * d
         sigma_V = [sigma_freq] * d
         
         for m in range(len(amp_range)):
@@ -46,10 +47,8 @@ class Model_Oscillator(Model):
                         sigma_V=sigma_V, sigma_W=sigma_W)
     
     def states_constraints(self, X):
-        
         X[:,0] = np.mod(X[:,0], 2*np.pi)
         X[X[:,1]<-self.tolerance,0] += np.pi
-        # X[X[:,1]<0,0] = np.pi-X[X[:,1]<0,0]
         X[X[:,1]<-self.tolerance,1] = -X[X[:,1]<-self.tolerance,1]
         for m in range(self.m):
             X[(X[:,2*m]<-self.tolerance) & (X[:,2*m+1]<-self.tolerance),0] += np.pi
@@ -59,8 +58,6 @@ class Model_Oscillator(Model):
             X[X[:,2*m]<-self.tolerance,2*m] = -X[X[:,2*m]<-self.tolerance,2*m]
             X[X[:,2*m+1]<-self.tolerance,0] = -X[X[:,2*m+1]<-self.tolerance,0]
             X[X[:,2*m+1]<-self.tolerance,2*m+1] = -X[X[:,2*m+1]<-self.tolerance,2*m+1]
-        # X[X[:,d]<self.X0_range[d,0],d] = self.X0_range[d,0]
-        # X[X[:,d]>self.X0_range[d,1],d] = self.X0_range[d,1]
         X[:,0] = np.mod(X[:,0], 2*np.pi)
         return X
 
@@ -77,38 +74,26 @@ class Model_Oscillator(Model):
         return Y
 
 class Galerkin_Oscillator(Galerkin):
-    """Galerkin approximation in finite element method:
+    """Galerkin_Oscillator: An approximation in finite element method:
             states: [ theta, a1, a2, b2, ..., am, bm]
             base functions: [ a1*cos(theta), a1*sin(theta), a2*cos(theta), b2*sin(theta), ..., am*cos(theta), bm*sin(theta)] 
-        Notation Note:
-            Np: int, number of particles
-            X: numpy array with the shape of (Np,d), particle states
-        Initialize = Galerkin(states, m)
+        Initialize = Galerkin_Oscillator(states, m)
             states: 1D list of string with length d, name of each state
             m: int, number of observations
         Members = 
-            d: int, number of states
-            m: int, number of observations
-            L: int, number of base functions
-            states: 1D list of string with length d, name of each state
             result: temporary memory location of the result of exec()
             psi_list: 1D list of string with length L, sympy expression of each base function
             grad_psi_list: 2D list of string with length L-by-d, sympy expression of gradient of psi function
             grad_grad_psi_list: 3D list of string with length L-by-d-by-d, sympy expression of gradient of gradient of psi function
             psi_string: string, executable 1D list of numpy array with length L
-            grad_psi_string, string, executable 2D list of numpy array with length L-by-d
-            grad_grad_psi_string, string, executable 3D list of numpy array with length L-by-d-by-d
+            grad_psi_string: string, executable 2D list of numpy array with length L-by-d
+            grad_grad_psi_string: string, executable 3D list of numpy array with length L-by-d-by-d
         Methods = 
-            sympy_executable_result(): return sympy executable string
-            split(X): split states (X) to members
-            psi(X): return a numpy array with the shape of (L,Np), base functions
-            grad_psi(X): return a numpy array with the shape of (L,d,Np), gradient of base functions
-            grad_grad_psi(X): return a numpy array with the shape of (L,d,d,Np), gradient of gradient of base functions
+            sympy_executable_result(self): return sympy executable string
     """
     def __init__(self, states, m):
         Galerkin.__init__(self, states, m, 2*m)
         
-        # self.states = ['self.'+state for state in states]
         self.result = ''
 
         self.psi_list = [None for l in range(self.L)]
@@ -152,6 +137,7 @@ class Galerkin_Oscillator(Galerkin):
 
         self.grad_psi_string = self.grad_psi_string[:-2]+']'
         self.grad_grad_psi_string = self.grad_grad_psi_string[:-2]+']'
+        return
 
     def sympy_executable_result(self):
         self.result = str(self.result)
@@ -198,7 +184,6 @@ class OFPF(FPF):
     def get_gain(self):
         gain = np.zeros(self.m, dtype=complex)
         for m in range(self.m):
-            # gain[m] = complex(am,-bm)
             theta_0 = -np.arctan(-np.mean(self.particles.X[:,1]*np.sin(self.particles.X[:,0]))/np.mean(self.particles.X[:,1]*np.cos(self.particles.X[:,0])))
             if m==0:
                 a_1 = np.mean(self.particles.X[:,1]*np.cos(self.particles.X[:,0]-theta_0))
@@ -209,45 +194,8 @@ class OFPF(FPF):
                 b_m = -np.mean(self.particles.X[:,2*m]*np.sin(self.particles.X[:,0]-theta_0)) + \
                         np.mean(self.particles.X[:,2*m+1]*np.cos(self.particles.X[:,0]-theta_0))
                 gain[m] = complex(a_m, -b_m)
-            print(gain[m])
             # gain[m] = complex(np.mean(np.square(self.particles.X[:,2*m+1])),-np.mean(np.square(self.particles.X[:,2*m+2])))
         return gain
-
-def complex_to_mag_phase(gain):
-    mag = np.abs(gain)
-    phase = np.angle(gain)
-    while phase[1]-phase[0] > 0:
-        phase[0] += 2*np.pi
-    return mag[1]/mag[0], phase[1]-phase[0]
-
-def bode(omegas):
-    mag = np.zeros(omegas.shape[0])
-    phase = np.zeros(omegas.shape[0])
-    X0=[[0.]]
-    for i, omega in enumerate(omegas):
-        dt = np.min((0.01/omega,0.01))
-        sys = LTI(A=[[-1]], B=[[1]], C=[[1]], D=[[0]], sigma_V=[0.01], sigma_W=[0.01], dt=dt)
-        # T = np.min((40/omega, 300))
-        T = 10.5*2*np.pi/omega
-        print("Frequency = {} [rad/s], sampling time = {} [s], Total time = {} [s], Total steps = {}".format(omega, dt, T, int(T/dt)))
-        t = np.arange(0, T+dt, dt)
-        f = omega/(2*np.pi)
-        U = np.reshape(np.cos(2.*np.pi*f*t), (-1,t.shape[0]))
-        Y, _ = sys.run(X0=X0, U=U)
-        signal = Signal.create(t, U, Y)
-        ofpf = OFPF(number_of_particles=1000, freq_range=[f, f], amp_range=[[0.9,1.1],[0.9/(omega**2+1),1.1*omega/(omega**2+1)]],\
-                    sigma_amp=[0.01, 0.01], sigma_W=[0.1, 0.1], dt=dt, sigma_freq=0.1, tolerance=0)
-        filtered_signal = ofpf.run(signal.Y, show_time=False)
-        mag[i], phase[i] = complex_to_mag_phase(ofpf.get_gain())
-        print(mag[i], phase[i])
-
-    #     fontsize = 20
-    #     fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, plot_histogram=True, particles_ratio=0.01, plot_c=False)
-    #     figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
-    #     figs = figure.plot()
-    # plt.show()
-        
-    return mag, phase
 
 if __name__ == "__main__":
     T = 5.5
@@ -255,62 +203,15 @@ if __name__ == "__main__":
     dt = 1./sampling_rate
 
     sigma_V = [0.1]
-    signal_type = Sinusoidals(dt, amp=[[1]], freq=[1], theta0=[[np.pi/2]], sigma_V=sigma_V, SNR=[20])
-    signal = Signal(signal_type=signal_type, T=T)
+    signal_type = Sinusoids(dt, amp=[[1]], freq=[1], theta0=[[np.pi/2]], sigma_V=sigma_V, SNR=[20])
+    Y, _ = Signal.create(signal_type=signal_type, T=T)
     
     Np = 1000
     ofpf = OFPF(number_of_particles=Np, freq_range=[0.9, 1.1], amp_range=[[0.9,1.1]],\
                 sigma_amp=[0], sigma_W=[0.1], dt=dt, sigma_freq=0.1, tolerance=0)
-    filtered_signal = ofpf.run(signal.Y, show_time=False)
+    filtered_signal = ofpf.run(Y.value, show_time=False)
 
     fontsize = 20
     fig_property = Struct(fontsize=fontsize, plot_signal=True, plot_X=True, plot_c=True)
-    figure = Figure(fig_property=fig_property, signal=signal, filtered_signal=filtered_signal)
+    figure = Figure(fig_property=fig_property, Y=Y, filtered_signal=filtered_signal)
     figure.plot_figures(show=True)
-
-    
-    # T = 200
-    # t = np.arange(0, T+dt, dt)
-    # f = 0.2/(2*np.pi)
-    # U = np.reshape(np.cos(2.*np.pi*f*t), (-1,t.shape[0]))
-    # X0=[[0.]]
-    
-    # omegas = np.logspace(0, 2, 201)
-    # omegas = np.array([0.22])
-    # mag, phase = bode(omegas)
-    # np.savetxt('bode.txt', np.transpose(np.array([omegas, mag, phase])), fmt='%.4f')
-    # plt.figure()
-    # plt.semilogx(omegas, mag)
-    # plt.ylabel('mag')
-    # plt.xlabel('freq [rad/s]')
-    # plt.figure()
-    # plt.semilogx(omegas, phase)
-    # plt.ylabel('phase [rad]')
-    # plt.xlabel('freq [rad/s]')
-    # plt.show()
-    # sys = LTI(A=[[-1]], B=[[1]], C=[[1]], D=[[0]], sigma_V=[0.], sigma_W=[0.], dt=dt)
-    # Y, _ = sys.run(X0=X0, U=U)
-    # signal = Signal.create(t, U, Y)
-
-
-    # ofpf = OFPF(number_of_particles=1000, frequency_range=[f, f], amp_range=[[0.7,1.5],[0,1]],\
-                # sigma_amp=[0.1, 0.1], sigma_W=[0.1, 0.1], dt=dt, sigma_freq=0)
-    # filtered_signal = ofpf.run(signal.Y)
-
-    # print(complex_to__mag_phase(ofpf.get_gain()))
-
-
-    
-    # plt.figure()
-    # plt.plot(t, signal.Y[0,:], label=r'$U$')
-    # plt.plot(t, filtered_signal.h_hat[0,:], label=r'$\hat U$')
-    # plt.legend()
-
-    # plt.figure()
-    # plt.plot(t, signal.Y[1,:], label=r'$Y$')
-    # plt.plot(t, filtered_signal.h_hat[1,:], label=r'$\hat Y$')
-    # plt.legend()
-
-    # plt.show()
-
-    # print(galerkin.__dict__.keys())
