@@ -75,8 +75,11 @@ class Signal(object):
         self.T = t[-1]
 
         m = 0
-        for arg in args:
-            m += arg.shape[0]
+        args = list(args)
+        for i, arg in enumerate(args):
+            if arg.ndim==1:
+                args[i] = np.reshape(arg, (1,-1))
+            m += args[i].shape[0]
         self.value = np.zeros((m, args[0].shape[1]))
         temp_m = 0
         for arg in args:
@@ -97,7 +100,7 @@ class Signal(object):
         layout = go.Layout(
             title = 'signal',
             font = dict(size=fontsize),
-            xaxis = dict(title='time')
+            xaxis = dict(title='time [s]')
         )
         fig = go.Figure(data=data, layout=layout)
         if show:
@@ -145,7 +148,6 @@ class Signal(object):
     def __iadd__(self, other):      
         self = self + other
         return self
-
 
 class Linear(Signal_Type):
     def __init__(self, dt):        

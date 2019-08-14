@@ -9,10 +9,10 @@ from __future__ import print_function
 
 import numpy as np
 
-from Tool import Struct
+from Tool import Struct, complex_to_mag_phase
 from Signal import Signal, Sinusoids
 from System import LTI
-from OFPF import OFPF, complex_to_mag_phase
+from OFPF import OFPF
 from CFPF import CFPF, Figure
 
 class COFPF(CFPF):
@@ -53,7 +53,7 @@ def bode(omegas):
             f = omegas[j,i]/(2*np.pi)
             ofpfs[j] = Struct(number_of_particles=100, freq_range=[f,f], amp_range=[[0.9,1.1],[0.9/(omegas[j,i]**2+1),1.1*omegas[j,i]/(omegas[j,i]**2+1)]], sigma_amp=[0.1, 0.1], sigma_freq=0.1)
         cofpf = COFPF(ofpfs, sigma_W=[0.1, 0.1], dt=dt)
-        filtered_signal = cofpf.run(signal.Y, show_time=False)
+        filtered_signal = cofpf.run(signal.value, show_time=False)
         for j in range(omegas[:,i].shape[0]):
             mag[j,i], phase[j,i] = complex_to_mag_phase(cofpf.fpfs[j].get_gain())
             print(mag[j,i], phase[j,i])

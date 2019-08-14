@@ -7,3 +7,4 @@ Jin/__pycache__
 *.txt
 baseline_modulation/signals
 baseline_modulation/filtered_signals
+test.py

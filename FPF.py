@@ -234,7 +234,7 @@ class FPF(object):
             dt: float, size of time step in sec
             particles: class Particles,
             galerkin: class Galerkin, base functions are defined at here
-            c: numpy array with the shape of (m,L), coefficients of base functions
+            get_states: function, return states (X)
             h_hat: numpy array with the shape of (m,), filtered observations
         Methods:
             optimal_control(self, dI, dZ): calculate the optimal control with new observations(Y)
@@ -256,8 +256,9 @@ class FPF(object):
                                     X0_range=model.X0_range, states_constraints=model.states_constraints, \
                                     m=self.m) 
         self.galerkin = galerkin
-        self.h_hat = np.zeros(self.m)
-    
+        self.get_states = model.get_states
+        self.h_hat = self.calculate_h_hat()
+
     def optimal_control(self, dI, dZ):
         """calculate the optimal control with new observations(Y):
             Arguments = 
@@ -322,7 +323,12 @@ class Figure(object):
         self.figs = dict()
 
         # set properties for plot_X and histogram if needed
-        if ('plot_X' in self.fig_property.__dict__) and self.fig_property.plot_X:
+        if (('plot_X' in self.fig_property.__dict__) and self.fig_property.plot_X) \
+            or (('plot_X_quantile' in self.fig_property.__dict__) and self.fig_property.plot_X_quantile):
+            # set time skip 
+            if not 't_skip' in self.fig_property.__dict__:
+                self.fig_property.t_skip = 1
+
             # set sampled index
             Np = filtered_signal.X.shape[0]
             if 'particles_ratio' in self.fig_property.__dict__ :
@@ -360,10 +366,13 @@ class Figure(object):
             self.figs['signal'] = self.plot_signal()
         if ('plot_X' in self.fig_property.__dict__) and self.fig_property.plot_X:
             self.figs['X'] = self.plot_X()
+        if ('plot_X_quantile' in self.fig_property.__dict__) and self.fig_property.plot_X_quantile:
+            self.figs['X_quantile'] = self.plot_X_quantile()
         if ('plot_c' in self.fig_property.__dict__) and self.fig_property.plot_c:
             self.figs['c'] = self.plot_c()
         if show:
             self.show()
+        return self.figs
     
     def plot_signal(self):
         print("plot_signal")
@@ -398,12 +407,13 @@ class Figure(object):
                     x = self.Y.t,
                     y = self.filtered_signal.h_hat[m,:] - self.Y.value[m,:],
                     name = 'error',
-                    line = dict(color='magenta')
+                    line = dict(color='magenta'),
+                    showlegend = False
                 ), row=len(specs), col=m+1)
         
         error_yaxis = {'yaxis{}'.format(self.Y.value.shape[0]+1):dict(title='error')}
         fig['layout'].update(
-            showlegend = False,
+            showlegend = True,
             font = dict(size=self.fig_property.fontsize),
             xaxis = dict(title='time [s]'),
             **error_yaxis
@@ -412,6 +422,87 @@ class Figure(object):
 
     def plot_X(self):
         print("plot_X")
+        if 'get_states' in self.fig_property.__dict__:
+            self.filtered_signal.X = self.fig_property.get_states(self.filtered_signal.X)
+        
+        fig =  self.states_figure()
+            
+        for d in range(self.filtered_signal.X.shape[1]):
+            for color_index, p in enumerate(self.sampled_index):
+                fig.append_trace(
+                    trace=go.Scatter(
+                        x = self.Y.t[::self.fig_property.t_skip],
+                        y = self.filtered_signal.X[p,d,::self.fig_property.t_skip],
+                        mode = 'markers',
+                        name = '$X^{}$'.format(p),
+                        line = dict(color=default_colors[np.mod(color_index,len(default_colors))]),
+                        legendgroup = 'X^{}'.format(p),
+                        showlegend = True if d==0 else False
+                    ), row=d+1, col=1)
+        
+            for k in range(self.fig_property.histogram.length):
+                fig.append_trace(trace=go.Histogram(
+                    y = self.filtered_signal.X[:,d,self.fig_property.histogram.t_index[k]],
+                    histnorm = 'probability',
+                    nbinsy = self.fig_property.histogram.n_bins,
+                    marker=dict(color='rgb(50, 50, 125)'),
+                    name = 't={}'.format(self.fig_property.histogram.t[k]),
+                    showlegend = False
+                ), row=d+1, col=self.fig_property.histogram.length+k+1)
+
+        return fig
+
+    def plot_X_quantile(self):
+        print("plot_X_quantile")
+        
+        q1 = np.quantile(self.filtered_signal.X, 0.25, axis=0)
+        q2 = np.quantile(self.filtered_signal.X, 0.5, axis=0)
+        q3 = np.quantile(self.filtered_signal.X, 0.75, axis=0)
+        q1 -= q2
+        q3 -= q2
+        if 'get_states' in self.fig_property.__dict__:
+            q2 = self.fig_property.get_states(q2)
+            self.filtered_signal.X = self.fig_property.get_states(self.filtered_signal.X)
+        q1 += q2
+        q3 += q2
+        
+        fig =  self.states_figure()
+        for d in range(self.filtered_signal.X.shape[1]):
+            fig.append_trace(trace=go.Scatter(
+                    x = self.Y.t,
+                    y = q2[d,:],
+                    name = 'E[$X_{}$]'.format(d+1),
+                    line = dict(color='magenta')
+                ), row=d+1, col=1)
+            fig.add_trace(trace=go.Scatter(
+                x = self.Y.t, 
+                y = q1[d],
+                fill = None,
+                mode = 'lines',
+                line_color = 'grey',
+                ), row=d+1, col=1)
+            fig.add_trace(trace=go.Scatter(
+                x = self.Y.t, 
+                y = q3[d],
+                fill = 'tonexty',
+                mode = 'lines',
+                line_color = 'grey',
+                ), row=d+1, col=1)
+
+        
+            for k in range(self.fig_property.histogram.length):
+                fig.append_trace(trace=go.Histogram(
+                    y = self.filtered_signal.X[:,d,self.fig_property.histogram.t_index[k]],
+                    histnorm = 'probability',
+                    nbinsy = self.fig_property.histogram.n_bins,
+                    marker=dict(color='rgb(50, 50, 125)'),
+                    name = 't={}'.format(self.fig_property.histogram.t[k]),
+                    showlegend = False
+                ), row=d+1, col=self.fig_property.histogram.length+k+1)
+
+        return fig
+
+    def states_figure(self):
         if self.fig_property.histogram.length==0 :
             row_spec = [{}]
         else:
@@ -419,7 +510,7 @@ class Figure(object):
             row_spec.extend([None] * (self.fig_property.histogram.length-1))
             row_spec.extend([{}] * self.fig_property.histogram.length)
         specs = [row_spec] * self.filtered_signal.X.shape[1]
-        
+
         fig = tools.make_subplots(
             rows = self.filtered_signal.X.shape[1],
             cols = max(2*self.fig_property.histogram.length,1),
@@ -431,28 +522,6 @@ class Figure(object):
         limits = np.zeros((self.filtered_signal.X.shape[1],2))
         for d in range(self.filtered_signal.X.shape[1]):
             limits[d,:] = find_limits(self.filtered_signal.X[:,d,:])
-            for color_index, p in enumerate(self.sampled_index):
-                fig.append_trace(
-                    trace=go.Scatter(
-                        x = self.Y.t,
-                        y = self.filtered_signal.X[p,d,:],
-                        mode = 'markers',
-                        name = '$X^{}$'.format(p),
-                        line = dict(color=default_colors[np.mod(color_index,len(default_colors))]),
-                        legendgroup = 'X^{}'.format(p),
-                        showlegend = True if d==0 else False
-                    ), row=d+1, col=1)
-        
-            for k in range(self.fig_property.histogram.length):
-                trace = go.Histogram(
-                    y = self.filtered_signal.X[:,d,self.fig_property.histogram.t_index[k]],
-                    histnorm = 'probability',
-                    nbinsy = self.fig_property.histogram.n_bins,
-                    marker=dict(color='rgb(50, 50, 125)'),
-                    name = 't={}'.format(self.fig_property.histogram.t[k]),
-                    showlegend = False
-                )
-                fig.append_trace(trace = trace, row=d+1, col=self.fig_property.histogram.length+k+1)
 
         xaxis = dict()
         t_lines = []
@@ -480,6 +549,7 @@ class Figure(object):
             **xaxis,
             **yaxis
         )
+
         return fig
 
     def plot_c(self):
@@ -504,7 +574,7 @@ class Figure(object):
         
         yaxis = dict()
         for l in range(self.filtered_signal.c.shape[1]):
-            yaxis['yaxis{}'.format(l+1)] = dict(title=r'$\kappa_{}$'.format(l+1))
+            yaxis['yaxis{}'.format(self.filtered_signal.c.shape[0]*l+1)] = dict(title=r'$\kappa_{}$'.format(l+1))
 
         fig['layout'].update(
             showlegend = False,
@@ -540,7 +610,15 @@ class Model_SinusoidalWave(Model):
         return sigma_W
 
     def states_constraints(self, X):
-        X[:,0] = np.mod(X[:,0], 2*np.pi)
+        return X
+
+    def get_states(self, X):
+        if X.ndim == 1:
+            X[0] = np.mod(X[0], 2*np.pi)
+        if X.ndim == 2:
+            X[0,:] = np.mod(X[0,:], 2*np.pi)
+        if X.ndim == 3:
+            X[:,0,:] = np.mod(X[:,0,:], 2*np.pi)
         return X
 
     def f(self, X):
