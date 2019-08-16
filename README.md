@@ -19,9 +19,10 @@ Note: Replace `dir` with your actual prefered directory path.
 $ git clone https://github.com/hanson-hschang/Feedback-Particle-Filter.git
 ```
 
-3. Download pyqtgraph package
+3. Download sympy and plotly package
 ```
-$ conda install -c anaconda pyqtgraph
+$ conda install -c anaconda sympy 
+$ conda install -c plotly plotly
 ```
 
 5. Have Fun!
