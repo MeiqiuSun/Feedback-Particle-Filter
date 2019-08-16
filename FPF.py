@@ -9,12 +9,13 @@ from __future__ import print_function
 from abc import ABC, abstractmethod
 
 import numpy as np
+import sympy
 
 from plotly import tools
 import plotly.offline as pyo
 import plotly.graph_objs as go
 
-from Tool import Struct, isiterable, find_limits, find_closest, default_colors
+from Tool import Struct, isiterable, find_limits, find_closest, circle_mean, default_colors
 from Signal import Signal, Sinusoids
 
 
@@ -215,6 +216,97 @@ class Galerkin(ABC):
                 partial_K[:,:,m,:] += self.c[m,l]*np.transpose(grad_grad_psi[l], (2,0,1))
         return K, partial_K
 
+class Galerkin_sympy(Galerkin):
+    """Galerkin_sympy: An approximation in finite element method:
+            states: [ theta, omega, a1, a2, b2, ..., am, bm]
+            base functions: [ omega, a1*cos(theta), a1*sin(theta), a2*cos(theta), b2*sin(theta), ..., am*cos(theta), bm*sin(theta)] 
+        Initialize = Galerkin_sympy(states, m, psi_list)
+            states: 1D list of string with length d, name of each state
+            m: int, number of observations
+            psi_list: 1D list of string with length L, sympy expression of each base function
+        Members = 
+            result: temporary memory location of the result of exec()
+            psi_list: 1D list of string with length L, sympy expression of each base function
+            grad_psi_list: 2D list of string with length L-by-d, sympy expression of gradient of psi function
+            grad_grad_psi_list: 3D list of string with length L-by-d-by-d, sympy expression of gradient of gradient of psi function
+            psi_string: string, executable 1D list of numpy array with length L
+            grad_psi_string: string, executable 2D list of numpy array with length L-by-d
+            grad_grad_psi_string: string, executable 3D list of numpy array with length L-by-d-by-d
+        Methods = 
+            sympy_executable_result(self): return sympy executable string
+    """
+    def __init__(self, states, m, psi_list):
+        Galerkin.__init__(self, states, m, len(psi_list))
+
+        self.psi_list = psi_list
+        self.psi_string = '[' + (', '.join(self.psi_list)).replace('sympy','np') + ']'
+
+        self.result = ''
+
+        self.grad_psi_list = [[None for d in range(self.d)] for l in range(self.L)]
+        self.grad_grad_psi_list = [[[None for d2 in range(self.d)] for d1 in range(self.d)] for l in range(self.L)]  
+        
+        # initialize symbols
+        exec(', '.join(self.states)+' = sympy.symbols("'+', '.join(self.states)+'")')
+        
+        # calculate grad_psi and grad_grad_psi
+        self.grad_psi_string = '['
+        self.grad_grad_psi_string = '['
+        for l in range(self.L):
+            self.grad_psi_string += '['
+            self.grad_grad_psi_string += '['
+            for d1 in range(self.d):
+                exec('self.result = sympy.diff('+self.psi_list[l]+','+self.states[d1]+')')
+                self.grad_psi_list[l][d1] = self.sympy_executable_result()
+                
+                self.grad_grad_psi_string += '['
+                for d2 in range(self.d):
+                    exec('self.result = sympy.diff('+self.grad_psi_list[l][d1]+','+self.states[d2]+')')
+                    self.grad_grad_psi_list[l][d1][d2] = self.sympy_executable_result()
+                self.grad_grad_psi_string += ((', ').join(self.grad_grad_psi_list[l][d1])).replace('sympy','np')
+                self.grad_grad_psi_string += '], '
+            
+            self.grad_psi_string += ((', ').join(self.grad_psi_list[l])).replace('sympy','np')
+            self.grad_psi_string += '], '
+            self.grad_grad_psi_string = self.grad_grad_psi_string[:-2] + '], '
+
+        self.grad_psi_string = self.grad_psi_string[:-2]+']'
+        self.grad_grad_psi_string = self.grad_grad_psi_string[:-2]+']'
+        return
+
+    def sympy_executable_result(self):
+        self.result = str(self.result)
+        if 'cos' in self.result:
+            self.result = self.result.replace('cos','sympy.cos')
+        if 'sin' in self.result:
+            self.result = self.result.replace('sin','sympy.sin')
+        return self.result
+
+    def psi(self, X):
+        self.split(X)
+        exec("self.result = "+self.psi_string)
+        trial_functions = self.result
+        return np.array(trial_functions)
+        
+    def grad_psi(self, X):
+        self.split(X)
+        exec("self.result = "+self.grad_psi_string)
+        grad_trial_functions = np.zeros([self.L, self.d, X.shape[0]])
+        for l in range(self.L):
+            for d in range(self.d):
+                grad_trial_functions[l,d,:] = self.result[l][d]
+        return grad_trial_functions
+
+    def grad_grad_psi(self, X):
+        self.split(X)
+        exec("self.result = "+self.grad_grad_psi_string)
+        grad_grad_trial_functions = np.zeros([self.L, self.d, self.d, X.shape[0]])
+        for l in range(self.L):
+            for d1 in range(self.d):
+                for d2 in range(self.d):
+                    grad_grad_trial_functions[l,d1,d2,:] = self.result[l][d1][d2]
+        return grad_grad_trial_functions
+
 class FPF(object):
     """FPF: Feedback Partilce Filter
         Notation Note:
@@ -361,6 +453,13 @@ class Figure(object):
                     n_bins = self.fig_property.histogram.n_bins
                 )
 
+        if (('plot_X_quantile' in self.fig_property.__dict__) and self.fig_property.plot_X_quantile):
+            if not 'mean_on_circle' in self.fig_property.__dict__:
+                self.fig_property.mean_on_circle = [False] * len(self.filtered_signal.states_label)
+            pass
+
+        return
+
     def plot_figures(self, show=False):
         if ('plot_signal' in self.fig_property.__dict__) and self.fig_property.plot_signal:
             self.figs['signal'] = self.plot_signal()
@@ -454,23 +553,29 @@ class Figure(object):
 
     def plot_X_quantile(self):
         print("plot_X_quantile")
-        
         q1 = np.quantile(self.filtered_signal.X, 0.25, axis=0)
-        q2 = np.quantile(self.filtered_signal.X, 0.5, axis=0)
+        mean = np.mean(self.filtered_signal.X, axis=0)
         q3 = np.quantile(self.filtered_signal.X, 0.75, axis=0)
-        q1 -= q2
-        q3 -= q2
+        q1 -= mean
+        q3 -= mean
         if 'get_states' in self.fig_property.__dict__:
-            q2 = self.fig_property.get_states(q2)
+            mean = self.fig_property.get_states(mean)
             self.filtered_signal.X = self.fig_property.get_states(self.filtered_signal.X)
-        q1 += q2
-        q3 += q2
+        q1 += mean
+        q3 += mean
         
+        for d in range(len(self.filtered_signal.states_label)):
+            if self.fig_property.mean_on_circle[d]:
+                mean[d,:], l = circle_mean(self.filtered_signal.X[:,d,:])
+                q1[d,:] = mean[d,:] - np.exp(-l)
+                q3[d,:] = mean[d,:] + np.exp(-l)
+                print(l, l.shape)
+
         fig =  self.states_figure()
         for d in range(self.filtered_signal.X.shape[1]):
             fig.append_trace(trace=go.Scatter(
                     x = self.Y.t,
-                    y = q2[d,:],
+                    y = mean[d,:],
                     name = 'E[$X_{}$]'.format(d+1),
                     line = dict(color='magenta')
                 ), row=d+1, col=1)

@@ -66,6 +66,10 @@ def complex_to_mag_phase(gain):
         phase[0] += 2*np.pi
     return mag[1]/mag[0], phase[1]-phase[0]
 
+def circle_mean(X):
+    Z = np.mean(np.exp(1j*X), axis=0)
+    return np.mod(np.angle(Z), 2*np.pi), np.absolute(Z)
+
 default_colors = [
     '#1f77b4',  # muted blue
     '#ff7f0e',  # safety orange
