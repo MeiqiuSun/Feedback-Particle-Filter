@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 import sympy
 
-from plotly import tools
+from plotly import subplots
 import plotly.offline as pyo
 import plotly.graph_objs as go
 
@@ -479,7 +479,7 @@ class Figure(object):
                 [None] * self.Y.value.shape[0],
                 [None] * self.Y.value.shape[0],
                 [{}] * self.Y.value.shape[0] ]
-        fig = tools.make_subplots(
+        fig = subplots.make_subplots(
             rows = len(specs), 
             cols = self.Y.value.shape[0],
             specs = specs,
@@ -616,7 +616,7 @@ class Figure(object):
             row_spec.extend([{}] * self.fig_property.histogram.length)
         specs = [row_spec] * self.filtered_signal.X.shape[1]
 
-        fig = tools.make_subplots(
+        fig = subplots.make_subplots(
             rows = self.filtered_signal.X.shape[1],
             cols = max(2*self.fig_property.histogram.length,1),
             specs = specs,
@@ -660,7 +660,7 @@ class Figure(object):
     def plot_c(self):
         print("plot_c")
 
-        fig = tools.make_subplots(
+        fig = subplots.make_subplots(
             rows = self.filtered_signal.c.shape[1],
             cols = self.filtered_signal.c.shape[0],
             shared_xaxes = True,

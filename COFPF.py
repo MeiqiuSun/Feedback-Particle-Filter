@@ -12,7 +12,7 @@ import numpy as np
 from Tool import Struct, complex_to_mag_phase
 from Signal import Signal, Sinusoids
 from System import LTI
-from OFPF import OFPF
+from OFPF import OFPF, Oscillator
 from CFPF import CFPF, Figure
 
 class COFPF(CFPF):
@@ -21,10 +21,8 @@ class COFPF(CFPF):
         self.fpfs = [None]*self.Nc
         for j in range(self.Nc):
             self.fpfs[j] = OFPF(number_of_particles=ofpfs[j].number_of_particles, 
-                                    freq_range=ofpfs[j].freq_range, 
-                                    amp_range=ofpfs[j].amp_range, 
-                                    sigma_amp=ofpfs[j].sigma_amp, 
-                                    sigma_W=sigma_W, dt=dt, sigma_freq=ofpfs[j].sigma_freq)
+                                    model_type=ofpfs[j].model_type, 
+                                    sigma_W=sigma_W, dt=dt)
         self.h_hat = np.zeros(len(sigma_W))
         self.dt = dt
         return
@@ -77,8 +75,10 @@ if __name__ == "__main__":
     Y, _ = Signal.create(signal_type=signal_type, T=T)
 
     ofpfs = [None] * 2
-    ofpfs[0] = Struct(number_of_particles=1000, freq_range=[10,10], amp_range=[[0.9,1.1],[0.0,0.1]], sigma_amp=[0.1,0.01], sigma_freq=0.1)
-    ofpfs[1] = Struct(number_of_particles=1000, freq_range=[2.1,2.1], amp_range=[[0.0,0.1],[0.9,1.1]], sigma_amp=[0.01,0.1], sigma_freq=0.1)
+    model_type = Oscillator(freq_range=[10,10], amp_range=[[0.9,1.1],[0.0,0.1]], sigma_amp=[0.1,0.01], sigma_freq=0.1)
+    ofpfs[0] = Struct(number_of_particles=1000, model_type=model_type)
+    model_type = Oscillator(freq_range=[2.1,2.1], amp_range=[[0.0,0.1],[0.9,1.1]], sigma_amp=[0.01,0.1], sigma_freq=0.1)
+    ofpfs[1] = Struct(number_of_particles=1000, model_type=model_type)
     cofpf = COFPF(ofpfs, sigma_W=[0.1, 0.1], dt=dt)
     filtered_signal = cofpf.run(Y.value, show_time=True)
 
