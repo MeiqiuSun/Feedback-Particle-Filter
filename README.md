@@ -19,7 +19,7 @@ Note: Replace `dir` with your actual prefered directory path.
 $ git clone https://github.com/hanson-hschang/Feedback-Particle-Filter.git
 ```
 
-3. Download sympy and plotly package
+3. Download sympy and plotly (at least version 4.0) package
 ```
 $ conda install -c anaconda sympy 
 $ conda install -c plotly plotly
