@@ -14,6 +14,7 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 
 from Tool import Struct, default_colors
+from Particles import Particles
 
 class LTI(object):
     def __init__(self, A, B, C, D, sigma_V, sigma_W, dt):
@@ -131,3 +132,35 @@ class BodeDiagram(object):
     @staticmethod
     def create_bode_data(name, frequency, magnitude, phase, Hz=False, dB=False, deg=False):
         return Struct(name=name, frequency=frequency, magnitude=magnitude, phase=phase, Hz=Hz, dB=dB, deg=deg)
+
+class StochasticSystem(object):
+    def __init__(self, number_of_particles, model):
+        self.d = model.d
+        self.m = model.m
+        self.sigma_V = model.sigma_V
+        self.sigma_W = model.sigma_W
+        self.f = model.f
+        self.h = model.h
+        self.particles = Particles(number_of_particles=number_of_particles, \
+                                    X0_range=model.X0_range, states_constraints=model.states_constraints, \
+                                    m=model.m)
+        self.dt = model.dt
+    
+    def update(self, U, t):
+        dX = self.f(self.particles.X, U, t)*self.dt + self.sigma_V*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
+        self.particles.update(dX)
+        self.particles.h = np.reshape(self.h(self.particles.X), [self.particles.Np, self.m])
+        return
+    
+    def run(self, U, show_time=False):
+        X = np.zeros([self.particles.Np, self.d, U.shape[1]])
+        Y = np.zeros([self.particles.Np, self.m, U.shape[1]])
+        for k in range(U.shape[1]):
+            if show_time and np.mod(k,int(1/self.dt))==0:
+                print("===========time: {} [s]==============".format(int(k*self.dt)))
+            X[:,:,k] = self.particles.X
+            self.update(U[:,k], k*self.dt)
+            Y[:,:,k] = self.particles.h
+            
+        return Struct(X=X, Y=Y)
+

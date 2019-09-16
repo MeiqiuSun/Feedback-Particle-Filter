@@ -17,38 +17,7 @@ import plotly.graph_objs as go
 
 from Tool import Struct, isiterable, find_limits, find_closest, circle_mean, default_colors
 from Signal import Signal, Sinusoids
-
-
-class Particles(object):
-    """Particles:
-        Notation Note:
-            d: number of states
-        Initialize = Particles(self, number_of_particles, X0_range, states_constraints, m):
-            number_of_particles: integer, number of particles
-            X0_range: 2D list of float with the length d-by-2, range of initial states
-            states_constraints: function, constraints on states
-            m: integer, number of observations
-        Members:
-            Np: integer, number of particles
-            X: numpy array with the shape of (Np,d), the estimated states for Np particles
-            h: numpy array with the shape of (Np,m), the esitmated observations for Np particles
-            states_constraints: function, constraints on states
-        Methods:
-            update(self, dX): use states_constraints function to update states in all particles
-    """
-
-    def __init__(self, number_of_particles, X0_range, states_constraints, m):
-        self.Np = int(number_of_particles)
-        self.X = np.zeros([self.Np, len(X0_range)])
-        for d in range(len(X0_range)):
-            self.X[:,d] = np.linspace(X0_range[d][0], X0_range[d][1], self.Np)
-        self.h = np.zeros([self.Np, m])
-        self.states_constraints = states_constraints
-        pass
-
-    def update(self, dX):
-        self.X = self.states_constraints(self.X+dX)
-        pass
+from Particles import Particles
 
 class Model(ABC):
     """Model:
@@ -381,8 +350,11 @@ class FPF(object):
         """
         dZ = np.reshape(Y*self.dt, [1, Y.shape[0]])
         dI = dZ-0.5*(self.particles.h+self.h_hat)*self.dt
-        dX = self.f(self.particles.X)*self.dt + self.sigma_V*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape)
+        # dU = np.zeros(self.particles.X.shape)
+        # dU[:,0] = Y*self.dt
+        dX = self.f(self.particles.X)*self.dt + self.sigma_V*np.random.normal(0, np.sqrt(self.dt), size=self.particles.X.shape) # +dU
         dU = self.optimal_control(dI, dZ)
+        # print('dX=',np.mean(dX,axis=0),'dU=',np.mean(dU,axis=0))
         self.particles.update(dX+dU)
         self.h_hat = self.calculate_h_hat()
         return dU
@@ -536,7 +508,7 @@ class Figure(object):
                         name = '$X^{}$'.format(p),
                         line = dict(color=default_colors[np.mod(color_index,len(default_colors))]),
                         legendgroup = 'X^{}'.format(p),
-                        showlegend = True if d==0 else False
+                        showlegend = True #if d==0 else False
                     ), row=d+1, col=1)
         
             for k in range(self.fig_property.histogram.length):

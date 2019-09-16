@@ -108,6 +108,39 @@ class Signal(object):
         return fig
 
     @staticmethod
+    def quantile_plot(signals, names, continuous=False, fontsize=15, show=False):
+        data = [None] * len(signals)
+        if not names:
+            names = [r'$Y_{}$'.format(i) for i in range(len(signals))]
+
+        for j in range(len(signals)):
+            signal = signals[j]
+            mean = np.mean(signal.value, axis=0)
+            # mean = np.quantile(signal.value, 0.5, axis=0)
+            quantile3 = np.quantile(signal.value, 0.75, axis=0)
+            quantile1 = np.quantile(signal.value, 0.25, axis=0)
+            trace = go.Scatter(
+                x = signal.t,
+                y = mean,
+                name = names[j],
+                error_y = dict(
+                    type='data',
+                    array=quantile3-mean,
+                    arrayminus=mean-quantile1,
+                    visible=True
+                )
+            )
+            data[j] = trace
+        layout = go.Layout(
+            title = 'signal',
+            font = dict(size=fontsize),
+            xaxis = dict(title='time [s]')
+        )
+        fig = go.Figure(data=data, layout=layout)
+        if show:
+            pyo.plot(fig, filename='signal_test.html', include_mathjax='cdn')
+        return fig
+    @staticmethod
     def stack(signal1, signal2, *args):
         signal = signal1 + signal2
         if len(args) != 0:

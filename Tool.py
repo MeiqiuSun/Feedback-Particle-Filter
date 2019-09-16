@@ -68,7 +68,14 @@ def complex_to_mag_phase(gain):
 
 def circle_mean(X):
     Z = np.mean(np.exp(1j*X), axis=0)
-    return np.mod(np.angle(Z), 2*np.pi), np.absolute(Z)
+    angle = np.mod(np.angle(Z), 2*np.pi)
+    X_wrap = np.remainder(angle, 2*np.pi)
+    mask = np.abs(angle)>np.pi
+    angle[mask] -= 2*np.pi*np.sign(angle[mask])
+    return angle, np.absolute(Z)
+    
+def length_modified(vector):
+    return (1-np.exp(-np.linalg.norm(vector)))*np.array(vector)/np.linalg.norm(vector)
 
 default_colors = [
     '#1f77b4',  # muted blue
